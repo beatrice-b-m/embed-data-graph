@@ -78,6 +78,11 @@ Missing or null input preserves the collection; an empty collection clears it;
 malformed or conflicting input preserves it with an issue. Explicit ROI input takes
 precedence over automatic projection. Individual ROI updates preserve the object.
 
+Rows create the patients and exams they address by default. With
+`parents="existing"` a load never adds a patient or exam: rows addressing one
+absent from the target graph at the start of the call are counted and skipped,
+so later tables integrate into a subset without growing it.
+
 Supplied linked-accession and registry-assignment sets replace on refresh and union
 on merge. Absent or unbound columns preserve the sets; explicit null clears them.
 Clearing an association does not delete its target object.

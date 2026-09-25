@@ -489,6 +489,46 @@ make `ValidationResult.valid` false; warnings remain valid unless
 `warnings_invalid=True`. Missing optional tables are not errors. Custom
 validators can inspect consumer fields.
 
+### Load later tables into a subset
+
+Tables can arrive after a subset has been chosen. By default a row creates the
+patient and exam it addresses, so a whole image table loaded into a partition
+would add every exam in that table. Pass `parents="existing"` to attach rows to
+the subset only:
+
+```python
+from embed_data_model import load_embed
+
+
+clinical = load_embed(
+    magview=[
+        {"empi_anon": "P1", "acc_anon": "A1", "numfind": 1, "side": "L", "desc": "screening"},
+        {"empi_anon": "P2", "acc_anon": "A2", "numfind": 1, "side": "R", "desc": "diagnostic"},
+    ]
+).graph
+screening = clinical.partition(level="exam", key=lambda exam: exam.description)["screening"]
+exam = screening.exam("A1")
+
+report = load_embed(
+    images=[
+        {"empi_anon": "P1", "acc_anon": "A1", "anon_dicom_path": "cohort1/P1/S/SE/I1.dcm"},
+        {"empi_anon": "P2", "acc_anon": "A2", "anon_dicom_path": "cohort1/P2/S/SE/I2.dcm"},
+    ],
+    into=screening,
+    parents="existing",
+)
+
+assert [item.accession_number for item in screening.exams] == ["A1"]
+assert screening.exam("A1") is exam
+assert [image.image_id for image in exam.images] == ["I1"]
+(skipped,) = report.issues
+assert (skipped.code, skipped.context["table"], skipped.context["rows"]) == ("rows_outside_graph", "images", 1)
+```
+
+Membership is read once, before the call loads anything, so rows of one call
+cannot admit each other. Patient, history and registry rows are checked by
+patient only; their accession is context rather than an exam they create.
+
 `graph.pop(entity)` moves an entity and everything it contains into a new graph
 and returns it. Exclusive descendants keep their Python identity; a descendant
 that something staying behind also contains is copied. Keys pointing back into

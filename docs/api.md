@@ -94,6 +94,17 @@ conflicts with another supplied value or with a populated value already in the
 graph becomes unknown with a diagnostic. Wide and narrow projections
 share one grouping stage. Child rows ensure parents without refreshing them.
 
+`parents="existing"` (default `"create"`) requires `into` and loads a row only
+when every patient and exam it addresses is already in the graph when the call
+starts. A whole table loaded into a partition or popped graph then attaches to
+that subset without adding patients or exams; existing exams still gain new
+findings, images, procedures and pathology. Patient, history and registry rows
+are checked by patient only. Image rows use the patient named by the EMBED path
+when the patient column is absent. ROI rows attach only to images already
+present or loaded by admitted image rows. A row that addresses no patient or
+exam is not loaded. Skipped rows are counted in one INFO issue per table with
+code `rows_outside_graph` and context `{"table": ..., "rows": ...}`.
+
 Managed fields by grain (bound mapped fields only): patient sex/birth_year, recorded
 per exam context as attribute observations;
 exam exam_date/description; finding laterality/finding_type/interpretation/anatomy,
