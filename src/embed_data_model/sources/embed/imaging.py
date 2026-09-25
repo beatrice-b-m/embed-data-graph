@@ -13,17 +13,21 @@ from embed_data_model.core.primitives import ImageModality, Laterality, ViewPosi
 from embed_data_model.core.source import Issue
 from embed_data_model.imaging.images import MammogramImage
 from embed_data_model.imaging.rois import RegionOfInterest
-from embed_data_model.sources.embed._values import cell, identifier, is_missing, reconcile_merge, whole_number
+from embed_data_model.sources.embed._values import (
+    cell, identifier, is_missing, outside_graph_issue, reconcile_merge, whole_number)
 
 
 def load_imaging(*, images: list[Mapping[str, Any]], rois: Optional[list[Mapping[str, Any]]],
                  graph: Any, columns: Mapping[str, Mapping[str, Optional[str]]],
-                 mode: str, issues: list[Issue], claims: dict[str, set[str]]) -> None:
+                 mode: str, issues: list[Issue], claims: dict[str, set[str]],
+                 create_images: bool = True) -> None:
     """Each ROI-bearing row supplies a complete collection, never a row identity.
 
     Automatic metadata collections are overridden only for images addressed by
     explicit rois rows. Missing/null input preserves; [] clears; malformed or
     conflicting replacements preserve the previous collection, including in merge.
+    Without ``create_images``, ROI rows whose image is absent are skipped and
+    counted instead of registering a bare image.
     """
     image_columns, roi_columns = columns["images"], columns["rois"]
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -83,11 +87,16 @@ def load_imaging(*, images: list[Mapping[str, Any]], rois: Optional[list[Mapping
     for field in ("image_id", "source_path"):
         if image_columns.get(field) is not None:
             metadata_roi_columns[field] = image_columns[field]
-    for rows, target_groups, cmap in ((images, automatic, metadata_roi_columns), (rois or [], explicit, roi_columns)):
+    outside: dict[str, list[Mapping[str, Any]]] = {"images": [], "rois": []}
+    for table, rows, target_groups, cmap in (("images", images, automatic, metadata_roi_columns),
+                                             ("rois", rois or [], explicit, roi_columns)):
         for row in rows:
-            image = _roi_image(row, cmap, image_columns, graph, issues)
+            image = _roi_image(row, cmap, image_columns, graph, issues, None if create_images else outside[table])
             if image is not None:
                 target_groups[image.image_id].append((row, image))
+    if outside["rois"]:
+        # Image rows were scoped by the loader; only explicit ROI rows are new here.
+        issues.append(outside_graph_issue("rois", len(outside["rois"])))
     automatic.update(explicit)
     for image_id, roi_rows in automatic.items():
         image = roi_rows[0][1]
@@ -176,7 +185,13 @@ def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], i
             "accession": identifier(_mapped(row, columns, "accession")), "managed": set(fields), "fields": fields}
 
 
-def _roi_image(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], image_columns: Mapping[str, Optional[str]], graph: Any, issues: list[Issue]) -> Any:
+def _roi_image(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], image_columns: Mapping[str, Optional[str]], graph: Any,
+               issues: list[Issue], outside: Optional[list[Mapping[str, Any]]] = None) -> Any:
+    """Return the image an ROI row addresses, registering it when absent.
+
+    When ``outside`` is a list, a row that would register a new image is
+    appended to it and None is returned instead.
+    """
     path = identifier(_mapped(row, columns, "source_path"))
     explicit_id = identifier(_mapped(row, columns, "image_id"))
     uid = identifier(_mapped(row, image_columns, "source_sop_instance_uid"))
@@ -196,6 +211,9 @@ def _roi_image(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], ima
             graph.update(image, source_paths=set(image.source_paths) | {path})
         return image
     if is_missing(_mapped(row, columns, "coordinates")):
+        return None
+    if outside is not None:
+        outside.append(row)
         return None
     image_id = explicit_id or uid
     if not image_id:

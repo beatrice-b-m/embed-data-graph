@@ -34,6 +34,7 @@ from embed_data_model.sources.embed._values import (
     code,
     identifier,
     is_missing,
+    outside_graph_issue,
     reconcile_merge,
     same as _same,
     scalar,
@@ -110,6 +111,7 @@ def load_embed(
     source_keys: Optional[Mapping[str, SourceKeySelector]] = None,
     columns: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     mode: Literal["refresh", "merge"] = "refresh",
+    parents: Literal["create", "existing"] = "create",
 ) -> LoadReport:
     """Load any supported subset of EMBED tables into a mutable graph.
 
@@ -157,6 +159,18 @@ def load_embed(
         value or with the populated graph value becomes unknown with an
         issue. Missing tables
         and unspecified descendant grains survive either mode.
+    parents : {"create", "existing"}, optional
+        Whether rows may add the patients and exams they address. Default
+        "create" registers any that are missing, and ROI rows register the
+        images they address. "existing" requires ``into`` and loads a row
+        only when every patient and exam it addresses is already in the
+        graph when the call starts, so loading a whole table into a subset
+        graph attaches to that subset without growing it. ROI rows then
+        attach only to images already present or loaded by admitted image
+        rows. History, patient and registry rows are checked by patient only;
+        their accession is context, not an exam they create. A row that
+        addresses no patient or exam is not loaded. Skipped rows are counted
+        in one INFO issue per table with code ``"rows_outside_graph"``.
 
     Returns
     -------
@@ -169,7 +183,8 @@ def load_embed(
     TypeError
         Invalid into, source_keys or columns shape.
     ValueError
-        Invalid mode, scope, column binding or source-key table.
+        Invalid mode or parents, ``parents="existing"`` without ``into``, or
+        an invalid scope, column binding or source-key table.
 
     Notes
     -----
@@ -195,12 +210,32 @@ def load_embed(
     'P1'
     >>> report.issues
     ()
+
+    Load a whole image table into a graph without adding exams to it:
+
+    >>> graph = load_embed(exams=[{"acc_anon": "A1", "empi_anon": "P1"}]).graph
+    >>> report = load_embed(
+    ...     images=[
+    ...         {"acc_anon": "A1", "empi_anon": "P1", "anon_dicom_path": "cohort1/P1/S/SE/I1.dcm"},
+    ...         {"acc_anon": "A2", "empi_anon": "P2", "anon_dicom_path": "cohort1/P2/S/SE/I2.dcm"},
+    ...     ],
+    ...     into=graph,
+    ...     parents="existing",
+    ... )
+    >>> [image.image_id for image in graph.exam("A1").images], graph.exam("A2")
+    (['I1'], None)
+    >>> [(issue.code, issue.context["rows"]) for issue in report.issues]
+    [('rows_outside_graph', 1)]
     """
 
     if into is not None and not isinstance(into, DatasetGraph):
         raise TypeError("into must be a DatasetGraph or None")
     if mode not in {"refresh", "merge"}:
         raise ValueError("mode must be 'refresh' or 'merge'")
+    if parents not in {"create", "existing"}:
+        raise ValueError("parents must be 'create' or 'existing'")
+    if parents == "existing" and into is None:
+        raise ValueError("parents='existing' requires an existing graph in into")
     if source_scope is not None and (
         not isinstance(source_scope, str) or not source_scope.strip()
     ):
@@ -234,6 +269,8 @@ def load_embed(
             ("registry", registry),
         )
     }
+    if parents == "existing":
+        materialized = _keep_existing_parents(materialized, graph, column_maps, issues)
 
     magview_rows = materialized["magview"]
     projected = _project_core_rows(magview_rows, column_maps)
@@ -288,6 +325,7 @@ def load_embed(
         mode=mode,
         issues=issues,
         claims=claims,
+        create_images=parents == "create",
     )
     _apply_patient_claims(graph, claims, mode)
 
@@ -388,6 +426,71 @@ def _record_source(
     if record.source_key is None:
         return None
     return SourceRef(source_scope, table_name, record.source_key)
+
+
+# The identity fields whose absent targets each table's rows would register.
+# ROI rows address images and are scoped by the imaging adapter instead.
+_CREATED_PARENTS: dict[str, tuple[str, ...]] = {
+    "patients": ("patient_id",),
+    "exams": ("patient_id", "accession"),
+    "findings": ("patient_id", "accession"),
+    "images": ("patient_id", "accession"),
+    "hormone_history": ("patient_id",),
+    "procedure_history": ("patient_id",),
+    "procedures": ("patient_id", "accession"),
+    "pathology": ("patient_id", "accession"),
+    "registry": ("patient_id",),
+    "magview": ("patient_id", "accession"),
+}
+
+
+def _keep_existing_parents(
+    materialized: Mapping[str, list[_InputRow]],
+    graph: DatasetGraph,
+    columns: Mapping[str, Mapping[str, Optional[str]]],
+    issues: list[Issue],
+) -> dict[str, list[_InputRow]]:
+    """Drop rows that would add a patient or exam, counting them per table.
+
+    Membership is read once, before any adapter runs, so the rows of one call
+    cannot admit each other and the outcome does not depend on table order.
+    """
+
+    result: dict[str, list[_InputRow]] = {}
+    for table, rows in materialized.items():
+        fields = _CREATED_PARENTS.get(table)
+        if fields is None:
+            result[table] = rows
+            continue
+        kept = [row for row in rows if _parents_present(row.mapping, table, fields, graph, columns[table])]
+        if len(kept) < len(rows):
+            issues.append(outside_graph_issue(table, len(rows) - len(kept)))
+        result[table] = kept
+    return result
+
+
+def _parents_present(
+    row: Mapping[str, Any],
+    table: str,
+    fields: Sequence[str],
+    graph: DatasetGraph,
+    columns: Mapping[str, Optional[str]],
+) -> bool:
+    """Return whether the row addresses a patient or exam and all are present."""
+
+    patient = _id_at(row, columns.get("patient_id")) if "patient_id" in fields else None
+    if table == "images" and patient is None:
+        # The imaging adapter claims the patient named by an EMBED path.
+        from embed_data_model.sources.embed.imaging import _parse_embed_path
+
+        parsed = _parse_embed_path(_id_at(row, columns.get("source_path")))
+        patient = parsed["patient_id"] if parsed else None
+    accession = _id_at(row, columns.get("accession")) if "accession" in fields else None
+    if patient is None and accession is None:
+        return False
+    return (patient is None or graph.patient(patient) is not None) and (
+        accession is None or graph.exam(accession) is not None
+    )
 
 
 def _project_core_rows(

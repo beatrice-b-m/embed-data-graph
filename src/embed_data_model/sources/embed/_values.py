@@ -144,3 +144,18 @@ def reconcile_merge(
                 context={"identity": key, "field": name, "values": [existing, value]},
             )
         )
+
+
+def outside_graph_issue(table: str, rows: int) -> Issue:
+    """Report rows that ``parents="existing"`` did not load, one issue per table.
+
+    The rows address a patient, exam or image that is absent from the target
+    graph. Skipping them is requested behavior, so the severity is INFO.
+    """
+
+    return Issue(
+        code="rows_outside_graph",
+        message="Rows addressing entities absent from the target graph were not loaded",
+        severity=IssueSeverity.INFO,
+        context={"table": table, "rows": rows},
+    )
