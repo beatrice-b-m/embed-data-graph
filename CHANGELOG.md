@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `load_embed(..., parents="existing")` loads whole tables into a subset graph
+  without adding patients or exams. A row loads only when every patient and exam
+  it addresses is already in the target graph; skipped rows are counted in one
+  INFO issue per table (`rows_outside_graph`). The default, `parents="create"`,
+  keeps the previous behavior, which registers the patients and exams rows
+  address. Previously, loading a full image table into a partition re-grew it
+  with placeholder exams unless the rows were filtered first.
+
 ## 0.2.0 — 2026-09-23
 
 Source release `v0.2.0`. This release aligns the model with the EMBED
