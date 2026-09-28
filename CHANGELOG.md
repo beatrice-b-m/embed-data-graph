@@ -29,6 +29,16 @@
 - A patient-attribute correction without the exam-date column replaces the
   observation for its accession's dated context. Previously it added a second,
   undated observation and the scalar attribute became unknown.
+- `is_context` no longer reports a newly added object as context when it
+  reuses the Python id of a removed one. Removing or moving an entity ends its
+  context mark; later loads leave the mark unchanged.
+- Patient partitions, `pop` and `register` of a patient now carry registry
+  entries not assigned to an exam and procedures or pathology without an
+  accession. Previously these were dropped from the copy or left behind.
+- A partition keeps a link that only an exam outside it records, as an
+  unresolved reference on the copied exam. Previously the link disappeared.
+- Partitioning no longer scans every unresolved record once per group, which
+  made per-exam partitions quadratic in the number of unresolved records.
 
 ## 0.2.0 — 2026-09-23
 

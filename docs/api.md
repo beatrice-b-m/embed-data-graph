@@ -74,8 +74,12 @@ Linked exams are associations, never containment, and read symmetrically:
 `select(level=..., predicate=...)` returns a non-owning view. `partition(level=...,
 key=...)` returns independent graphs holding deep copies of the grouped entities,
 everything they contain, and their ancestors, for which `graph.is_context(entity)`
-is True. Copies keep the keys they stored, so relationships to entities outside a
-group stay unresolved. Copy failures raise an informative error; consumer
+is True. A grouped patient also brings the registry entries, procedures and
+pathology that name it. Copies keep the keys they stored, so relationships to
+entities outside a group stay unresolved; a link recorded only on an exam outside
+the group is added to the copied exam's `linked_accessions` for the same reason.
+The context mark is fixed when the partition is made and ends when the entity is
+removed or moved. Copy failures raise an informative error; consumer
 `__deepcopy__` hooks are supported.
 
 ## Semantic loading

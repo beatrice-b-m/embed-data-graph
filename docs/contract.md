@@ -106,15 +106,21 @@ a collision check covering the whole change. Collections are resolved views.
 Source claims remain source facts.
 
 An entity belongs to at most one graph. Registration rejects distinct objects at
-occupied keys. Popping an entity moves it and what it contains into a new graph.
-Exclusive descendants retain Python identity; descendants also contained by
+occupied keys. Popping an entity moves it and what it contains into a new graph;
+a patient also takes the registry entries, procedures and pathology that name it
+in their identity, even when no exam reaches them. Exclusive descendants retain Python identity; descendants also contained by
 something that stays are deep-copied at the boundary. Linked exams are
 associations, not containment; keys crossing the boundary stay unresolved until
 their targets are present.
 
 Selections are live, non-owning views. Partitions are independent graphs of deep
 copies: the selected entities, what they contain, and their ancestors as context.
-Consumer metadata is copied; unsupported copy operations raise an error.
+A selected patient brings its patient-scoped entities as `pop` does. A link that
+only an exam outside the partition records is kept on the copied exam, so it stays
+an unresolved reference rather than disappearing. The context mark records how an
+entity entered the partition; later loads do not change it, and it ends when the
+entity is removed or moved out. Consumer metadata is copied; unsupported copy
+operations raise an error.
 
 ## Validation and evidence
 

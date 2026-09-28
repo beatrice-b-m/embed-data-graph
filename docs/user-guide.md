@@ -457,8 +457,10 @@ Editing a selected object edits the source graph. `graph.partition(level=...,
 key=...)` returns independent graphs of deep copies. A scalar key, including a
 tuple, selects one output; a list or set key places the object in several
 outputs. Each output holds the selected objects, everything they contain, and
-their ancestors, for which `output.is_context(obj)` is True. Supported levels include patient, exam, finding, procedure,
-pathology, image, ROI, and registry.
+their ancestors, for which `output.is_context(obj)` is True. A partitioned
+patient also brings the registry entries, procedures and pathology that name it,
+even when no exam reaches them. Supported levels include patient, exam, finding,
+procedure, pathology, image, ROI, and registry.
 
 Validation is separate from loading and selection:
 
@@ -532,7 +534,7 @@ cannot admit each other. Patient, history and registry rows are checked by
 patient only; their accession is context rather than an exam they create.
 
 `graph.pop(entity)` moves an entity and everything it contains into a new graph
-and returns it. Exclusive descendants keep their Python identity; a descendant
+and returns it; a patient also takes its patient-scoped entities. Exclusive descendants keep their Python identity; a descendant
 that something staying behind also contains is copied. Keys pointing back into
 the original graph, such as linked accessions, stay as unresolved references.
 Register the popped entity in another graph to complete a move; `register`
