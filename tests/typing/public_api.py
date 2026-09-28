@@ -38,6 +38,7 @@ assert_type(parts[Laterality.LEFT], DatasetGraph)
 assert_type(graph.partition_by_validation(level="exam"), Tuple[DatasetGraph, DatasetGraph])
 assert_type(load_embed(patients=[{"empi_anon": "P"}], mode="merge"), LoadReport)
 assert_type(load_embed(exams=({"acc_anon": str(i)} for i in range(2))), LoadReport)
+assert_type(load_embed(images=[{"acc_anon": "A"}], into=DatasetGraph(), parents="existing"), LoadReport)
 assert_type(Pathology(patient_id="P", record_id="R"), Pathology)
 assert_type(RegionOfInterest.from_embed_coordinates((0, 0, 9, 9), image_id="I", roi_key="0"), RegionOfInterest)
 

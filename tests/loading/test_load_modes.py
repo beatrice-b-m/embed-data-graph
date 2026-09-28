@@ -1,8 +1,12 @@
 """Refresh and merge semantics across separate load_embed calls."""
 
-import pandas as pd
+from datetime import date
 
-from embed_data_model import DatasetGraph, load_embed
+import pandas as pd
+import pytest
+
+from embed_data_model import DatasetGraph, Laterality, load_embed
+from embed_data_model.core.anatomy import DepthThird, MedialLateralAxis
 
 
 def test_partial_magview_load_keeps_patient_and_exam_fields_it_does_not_supply():
@@ -134,3 +138,84 @@ def test_conflicting_patient_values_within_one_exam_are_reported():
 
     assert report.graph.patient("P1").sex is None
     assert "conflicting_patient_sex" in {issue.code for issue in report.issues}
+
+
+LOCATED = {"empi_anon": "P1", "acc_anon": "A1", "numfind": 1, "side": "L", "location": "10", "depth": "P", "distance": 3}
+
+
+def located_finding(extract, mode="refresh"):
+    graph = load_embed(magview=[LOCATED]).graph
+    report = load_embed(findings=[{"acc_anon": "A1", "numfind": 1, **extract}], into=graph, mode=mode)
+    return graph.finding("A1", "1"), report
+
+
+def test_partial_finding_extract_keeps_the_anatomy_it_does_not_supply():
+    finding, report = located_finding({"distance": 4})
+    position = finding.anatomical_position
+
+    assert finding.laterality is Laterality.LEFT
+    assert (position.laterality, position.clock_position.hour) == (Laterality.LEFT, 10)
+    assert position.quadrant.depth is DepthThird.POSTERIOR
+    assert position.distance_from_nipple_cm == 4.0
+    assert not report.issues
+
+
+def test_location_only_extract_keeps_side_and_depth():
+    finding, _ = located_finding({"location": "2"})
+    position = finding.anatomical_position
+
+    assert (position.laterality, position.clock_position.hour) == (Laterality.LEFT, 2)
+    assert position.quadrant.depth is DepthThird.POSTERIOR
+    assert position.distance_from_nipple_cm == 3.0
+
+
+def test_side_correction_re_derives_the_position_on_the_new_side():
+    finding, _ = located_finding({"side": "R"})
+    position = finding.anatomical_position
+
+    assert finding.laterality is Laterality.RIGHT
+    assert position.laterality is Laterality.RIGHT
+    assert position.quadrant.ml is MedialLateralAxis.LATERAL
+    assert position.distance_from_nipple_cm == 3.0
+
+
+def test_explicit_null_still_clears_an_anatomy_component_in_refresh():
+    finding, _ = located_finding({"distance": None})
+
+    assert finding.anatomical_position.distance_from_nipple_cm is None
+    assert finding.anatomical_position.clock_position.hour == 10
+
+
+@pytest.mark.parametrize("mode", ["refresh", "merge"])
+def test_side_and_location_from_separate_tables_combine_in_either_order(mode):
+    side = [{"empi_anon": "P1", "acc_anon": "A1", "numfind": 1, "side": "L", "asses": "N"}]
+    location = [{"acc_anon": "A1", "numfind": 1, "location": "10", "depth": "P"}]
+    together = load_embed(magview=side, findings=location).graph
+    side_first = load_embed(magview=side).graph
+    load_embed(findings=location, into=side_first, mode=mode)
+    location_first = load_embed(findings=location).graph
+    load_embed(magview=side, into=location_first, mode=mode)
+
+    positions = [graph.finding("A1", "1").anatomical_position for graph in (together, side_first, location_first)]
+    assert {(item.laterality, item.clock_position.hour) for item in positions} == {(Laterality.LEFT, 10)}
+
+
+def test_undated_attribute_correction_replaces_the_dated_observation():
+    graph = load_embed(patients=[{"empi_anon": "P1", "acc_anon": "A1", "studydate_anon": "2020-01-01", "GENDER_DESC": "F"}]).graph
+    load_embed(patients=[{"empi_anon": "P1", "acc_anon": "A1", "GENDER_DESC": "M"}], into=graph)
+
+    patient = graph.patient("P1")
+    assert patient.sex == "M"
+    assert [(item.accession_number, item.value) for item in patient.attribute_observations] == [("A1", "M")]
+
+
+def test_undated_row_joins_a_dated_row_for_the_same_accession_in_one_call():
+    patient = load_embed(
+        patients=[
+            {"empi_anon": "P1", "acc_anon": "A1", "GENDER_DESC": "F"},
+            {"empi_anon": "P1", "acc_anon": "A1", "studydate_anon": "2020-01-01", "race": "W"},
+        ]
+    ).graph.patient("P1")
+
+    assert {item.context_date for item in patient.attribute_observations} == {date(2020, 1, 1)}
+    assert patient.sex == "F"

@@ -446,7 +446,9 @@ loader does not invent frame indices or clinical correspondence.
 Derivatives require an explicit model `image_id` and `derived_from`. Their
 metadata and ROIs do not replace the original source image or its source-path
 lookups. Images with an accession can establish an exam shell and source patient
-claim; an image row without clinical context remains image-local.
+claim; an image row without clinical context remains image-local. A claim from
+the image table sits beside claims from clinical tables: loading images later
+cannot re-parent an exam, and a disagreement leaves the exam unowned.
 
 ## Selection, validation, partitioning, and movement
 
@@ -455,8 +457,10 @@ Editing a selected object edits the source graph. `graph.partition(level=...,
 key=...)` returns independent graphs of deep copies. A scalar key, including a
 tuple, selects one output; a list or set key places the object in several
 outputs. Each output holds the selected objects, everything they contain, and
-their ancestors, for which `output.is_context(obj)` is True. Supported levels include patient, exam, finding, procedure,
-pathology, image, ROI, and registry.
+their ancestors, for which `output.is_context(obj)` is True. A partitioned
+patient also brings the registry entries, procedures and pathology that name it,
+even when no exam reaches them. Supported levels include patient, exam, finding,
+procedure, pathology, image, ROI, and registry.
 
 Validation is separate from loading and selection:
 
@@ -489,8 +493,48 @@ make `ValidationResult.valid` false; warnings remain valid unless
 `warnings_invalid=True`. Missing optional tables are not errors. Custom
 validators can inspect consumer fields.
 
+### Load later tables into a subset
+
+Tables can arrive after a subset has been chosen. By default a row creates the
+patient and exam it addresses, so a whole image table loaded into a partition
+would add every exam in that table. Pass `parents="existing"` to attach rows to
+the subset only:
+
+```python
+from embed_data_model import load_embed
+
+
+clinical = load_embed(
+    magview=[
+        {"empi_anon": "P1", "acc_anon": "A1", "numfind": 1, "side": "L", "desc": "screening"},
+        {"empi_anon": "P2", "acc_anon": "A2", "numfind": 1, "side": "R", "desc": "diagnostic"},
+    ]
+).graph
+screening = clinical.partition(level="exam", key=lambda exam: exam.description)["screening"]
+exam = screening.exam("A1")
+
+report = load_embed(
+    images=[
+        {"empi_anon": "P1", "acc_anon": "A1", "anon_dicom_path": "cohort1/P1/S/SE/I1.dcm"},
+        {"empi_anon": "P2", "acc_anon": "A2", "anon_dicom_path": "cohort1/P2/S/SE/I2.dcm"},
+    ],
+    into=screening,
+    parents="existing",
+)
+
+assert [item.accession_number for item in screening.exams] == ["A1"]
+assert screening.exam("A1") is exam
+assert [image.image_id for image in exam.images] == ["I1"]
+(skipped,) = report.issues
+assert (skipped.code, skipped.context["table"], skipped.context["rows"]) == ("rows_outside_graph", "images", 1)
+```
+
+Membership is read once, before the call loads anything, so rows of one call
+cannot admit each other. Patient, history and registry rows are checked by
+patient only; their accession is context rather than an exam they create.
+
 `graph.pop(entity)` moves an entity and everything it contains into a new graph
-and returns it. Exclusive descendants keep their Python identity; a descendant
+and returns it; a patient also takes its patient-scoped entities. Exclusive descendants keep their Python identity; a descendant
 that something staying behind also contains is copied. Keys pointing back into
 the original graph, such as linked accessions, stay as unresolved references.
 Register the popped entity in another graph to complete a move; `register`

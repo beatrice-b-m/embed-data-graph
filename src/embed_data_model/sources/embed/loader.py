@@ -33,7 +33,10 @@ from embed_data_model.sources.embed._values import (
     cell,
     code,
     identifier,
+    Claims,
     is_missing,
+    outside_graph_issue,
+    record_claims,
     reconcile_merge,
     same as _same,
     scalar,
@@ -110,6 +113,7 @@ def load_embed(
     source_keys: Optional[Mapping[str, SourceKeySelector]] = None,
     columns: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     mode: Literal["refresh", "merge"] = "refresh",
+    parents: Literal["create", "existing"] = "create",
 ) -> LoadReport:
     """Load any supported subset of EMBED tables into a mutable graph.
 
@@ -157,6 +161,18 @@ def load_embed(
         value or with the populated graph value becomes unknown with an
         issue. Missing tables
         and unspecified descendant grains survive either mode.
+    parents : {"create", "existing"}, optional
+        Whether rows may add the patients and exams they address. Default
+        "create" registers any that are missing, and ROI rows register the
+        images they address. "existing" requires ``into`` and loads a row
+        only when every patient and exam it addresses is already in the
+        graph when the call starts, so loading a whole table into a subset
+        graph attaches to that subset without growing it. ROI rows then
+        attach only to images already present or loaded by admitted image
+        rows. History, patient and registry rows are checked by patient only;
+        their accession is context, not an exam they create. A row that
+        addresses no patient or exam is not loaded. Skipped rows are counted
+        in one INFO issue per table with code ``"rows_outside_graph"``.
 
     Returns
     -------
@@ -169,7 +185,8 @@ def load_embed(
     TypeError
         Invalid into, source_keys or columns shape.
     ValueError
-        Invalid mode, scope, column binding or source-key table.
+        Invalid mode or parents, ``parents="existing"`` without ``into``, or
+        an invalid scope, column binding or source-key table.
 
     Notes
     -----
@@ -181,6 +198,10 @@ def load_embed(
 
     Coded values (assessment, recommendation, procedure type, pathology
     descriptors) are trimmed and uppercased before comparison and storage.
+
+    Source patient claims are kept per table. Refresh replaces the claims a
+    table supplied before; claims from other tables remain, so an exam's
+    ``asserted_patient_ids`` does not depend on load order.
 
     ROI input replaces the complete addressed collection in either mode, including
     manual annotations. Save/pop manual ROIs before replacement if needed.
@@ -195,12 +216,32 @@ def load_embed(
     'P1'
     >>> report.issues
     ()
+
+    Load a whole image table into a graph without adding exams to it:
+
+    >>> graph = load_embed(exams=[{"acc_anon": "A1", "empi_anon": "P1"}]).graph
+    >>> report = load_embed(
+    ...     images=[
+    ...         {"acc_anon": "A1", "empi_anon": "P1", "anon_dicom_path": "cohort1/P1/S/SE/I1.dcm"},
+    ...         {"acc_anon": "A2", "empi_anon": "P2", "anon_dicom_path": "cohort1/P2/S/SE/I2.dcm"},
+    ...     ],
+    ...     into=graph,
+    ...     parents="existing",
+    ... )
+    >>> [image.image_id for image in graph.exam("A1").images], graph.exam("A2")
+    (['I1'], None)
+    >>> [(issue.code, issue.context["rows"]) for issue in report.issues]
+    [('rows_outside_graph', 1)]
     """
 
     if into is not None and not isinstance(into, DatasetGraph):
         raise TypeError("into must be a DatasetGraph or None")
     if mode not in {"refresh", "merge"}:
         raise ValueError("mode must be 'refresh' or 'merge'")
+    if parents not in {"create", "existing"}:
+        raise ValueError("parents must be 'create' or 'existing'")
+    if parents == "existing" and into is None:
+        raise ValueError("parents='existing' requires an existing graph in into")
     if source_scope is not None and (
         not isinstance(source_scope, str) or not source_scope.strip()
     ):
@@ -234,6 +275,8 @@ def load_embed(
             ("registry", registry),
         )
     }
+    if parents == "existing":
+        materialized = _keep_existing_parents(materialized, graph, column_maps, issues)
 
     magview_rows = materialized["magview"]
     projected = _project_core_rows(magview_rows, column_maps)
@@ -243,7 +286,7 @@ def load_embed(
         "findings": materialized["findings"] + projected["findings"],
     }
     # Source patient claims per accession, applied once after every adapter ran.
-    claims: dict[str, set[str]] = {}
+    claims: Claims = {}
     _load_patients(core_rows["patients"], graph, column_maps["patients"], mode, issues)
     _load_exams(core_rows["exams"], graph, column_maps["exams"], mode, issues, claims)
     _load_findings(core_rows["findings"], graph, column_maps["findings"], mode, issues, resolved_scope, claims)
@@ -288,6 +331,7 @@ def load_embed(
         mode=mode,
         issues=issues,
         claims=claims,
+        create_images=parents == "create",
     )
     _apply_patient_claims(graph, claims, mode)
 
@@ -390,6 +434,71 @@ def _record_source(
     return SourceRef(source_scope, table_name, record.source_key)
 
 
+# The identity fields whose absent targets each table's rows would register.
+# ROI rows address images and are scoped by the imaging adapter instead.
+_CREATED_PARENTS: dict[str, tuple[str, ...]] = {
+    "patients": ("patient_id",),
+    "exams": ("patient_id", "accession"),
+    "findings": ("patient_id", "accession"),
+    "images": ("patient_id", "accession"),
+    "hormone_history": ("patient_id",),
+    "procedure_history": ("patient_id",),
+    "procedures": ("patient_id", "accession"),
+    "pathology": ("patient_id", "accession"),
+    "registry": ("patient_id",),
+    "magview": ("patient_id", "accession"),
+}
+
+
+def _keep_existing_parents(
+    materialized: Mapping[str, list[_InputRow]],
+    graph: DatasetGraph,
+    columns: Mapping[str, Mapping[str, Optional[str]]],
+    issues: list[Issue],
+) -> dict[str, list[_InputRow]]:
+    """Drop rows that would add a patient or exam, counting them per table.
+
+    Membership is read once, before any adapter runs, so the rows of one call
+    cannot admit each other and the outcome does not depend on table order.
+    """
+
+    result: dict[str, list[_InputRow]] = {}
+    for table, rows in materialized.items():
+        fields = _CREATED_PARENTS.get(table)
+        if fields is None:
+            result[table] = rows
+            continue
+        kept = [row for row in rows if _parents_present(row.mapping, table, fields, graph, columns[table])]
+        if len(kept) < len(rows):
+            issues.append(outside_graph_issue(table, len(rows) - len(kept)))
+        result[table] = kept
+    return result
+
+
+def _parents_present(
+    row: Mapping[str, Any],
+    table: str,
+    fields: Sequence[str],
+    graph: DatasetGraph,
+    columns: Mapping[str, Optional[str]],
+) -> bool:
+    """Return whether the row addresses a patient or exam and all are present."""
+
+    patient = _id_at(row, columns.get("patient_id")) if "patient_id" in fields else None
+    if table == "images" and patient is None:
+        # The imaging adapter claims the patient named by an EMBED path.
+        from embed_data_model.sources.embed.imaging import _parse_embed_path
+
+        parsed = _parse_embed_path(_id_at(row, columns.get("source_path")))
+        patient = parsed["patient_id"] if parsed else None
+    accession = _id_at(row, columns.get("accession")) if "accession" in fields else None
+    if patient is None and accession is None:
+        return False
+    return (patient is None or graph.patient(patient) is not None) and (
+        accession is None or graph.exam(accession) is not None
+    )
+
+
 def _project_core_rows(
     rows: Sequence[_InputRow],
     columns: Mapping[str, Mapping[str, Optional[str]]],
@@ -426,6 +535,10 @@ def _load_patients(
     context and merge fills it. The scalar attribute keeps a value only when
     every observation of the patient agrees; otherwise consumers choose one
     with ``Patient.attribute_as_of``.
+
+    A row without the date column addresses the one dated context its
+    accession already has, in the graph or among this call's dated rows, so an
+    undated correction replaces that observation instead of adding another.
     """
 
     converters = {"sex": text, "race": text, "ethnicity": text, "birth_year": _birth_year_value}
@@ -434,12 +547,22 @@ def _load_patients(
         patient = _ensure_patient(graph, key)
         date_column = columns.get("context_date")
         contexts: dict[tuple[Optional[str], Optional[date]], list[_InputRow]] = {}
+        dates: dict[Optional[str], set[Optional[date]]] = {}
+        for item in patient.attribute_observations:
+            dates.setdefault(item.accession_number, set()).add(item.context_date)
+        undated: list[tuple[Optional[str], _InputRow]] = []
         for row in groups[key]:
-            context = (
-                _id_at(row.mapping, columns.get("accession")),
-                _date_value(row.mapping.get(date_column)) if date_column else None,
-            )
-            contexts.setdefault(context, []).append(row)
+            accession = _id_at(row.mapping, columns.get("accession"))
+            if date_column is None or date_column not in row.mapping:
+                undated.append((accession, row))
+                continue
+            context_date = _date_value(row.mapping.get(date_column))
+            dates.setdefault(accession, set()).add(context_date)
+            contexts.setdefault((accession, context_date), []).append(row)
+        for accession, row in undated:
+            known = dates.get(accession, set())
+            context_date = next(iter(known)) if len(known) == 1 else None
+            contexts.setdefault((accession, context_date), []).append(row)
         touched: set[str] = set()
         for (accession, context_date), context_rows in sorted(contexts.items(), key=repr):
             fields, conflicts = _combine_fields(context_rows, columns, converters, "patient", key, issues)
@@ -473,7 +596,7 @@ def _load_exams(
     columns: Mapping[str, Optional[str]],
     mode: str,
     issues: list[Issue],
-    claims: dict[str, set[str]],
+    claims: Claims,
 ) -> None:
     groups = _group_rows(rows, columns, ("accession",), "exam", issues)
     for key in sorted(groups, key=repr):
@@ -515,7 +638,7 @@ def _load_findings(
     mode: str,
     issues: list[Issue],
     source_scope: str,
-    claims: dict[str, set[str]],
+    claims: Claims,
 ) -> None:
     groups = _group_rows(
         rows,
@@ -558,9 +681,12 @@ def _load_findings(
             fields.get("recommendation"),
             _semantic_source(group),
         )
+        existing = graph.get("finding", key)
+        # Anatomy combines side, location, depth and distance; a component the
+        # rows do not supply keeps the finding's stored value.
         anatomy = _finding_anatomy(
-            fields,
-            laterality,
+            _anatomy_inputs(existing, fields, conflicts, mode),
+            _effective_side(existing, fields, conflicts, laterality, mode),
             group,
             source_scope,
             key,
@@ -583,9 +709,9 @@ def _load_findings(
         }
         dependencies = {
             "interpretation": ("assessment", "recommendation"),
-            "anatomical_position": ("location", "depth", "distance"),
-            "normalization_evidence": ("location", "depth", "distance"),
-            "normalization_warnings": ("location", "depth", "distance"),
+            "anatomical_position": ("laterality", "location", "depth", "distance"),
+            "normalization_evidence": ("laterality", "location", "depth", "distance"),
+            "normalization_warnings": ("laterality", "location", "depth", "distance"),
         }
         managed_updates = {}
         for name, value in updates.items():
@@ -595,7 +721,6 @@ def _load_findings(
             if mode == "refresh" or any(conflicts.get(semantic) or fields.get(semantic) is not None for semantic in semantics):
                 managed_updates[name] = value
         updates = managed_updates
-        existing = graph.get("finding", key)
         descriptors = _finding_descriptors(existing, fields, conflicts, mode, key, issues)
         if descriptors is not None:
             updates["descriptors"] = descriptors
@@ -758,34 +883,44 @@ def _claim_exam_from_rows(
     exam: Any,
     rows: Sequence[_InputRow],
     columns: Mapping[str, Optional[str]],
-    claims_by_exam: dict[str, set[str]],
+    claims: Claims,
 ) -> None:
     patient_column = columns.get("patient_id")
-    claims = {pid for pid in (_id_at(row.mapping, patient_column) for row in rows) if pid is not None}
-    for patient_id in claims:
-        _ensure_patient(graph, patient_id)
-    claims_by_exam.setdefault(exam.accession_number, set()).update(claims)
+    for row in rows:
+        patient_id = _id_at(row.mapping, patient_column)
+        if patient_id is not None:
+            _ensure_patient(graph, patient_id)
+            record_claims(claims, exam.accession_number, row.table, (patient_id,))
 
 
 def _apply_patient_claims(
     graph: DatasetGraph,
-    claims_by_exam: Mapping[str, set[str]],
+    claims: Claims,
     mode: str,
 ) -> None:
     """Apply the patient claims one invocation supplied for each exam.
 
-    Refresh replaces an exam's claims with this snapshot's claims, so a
-    corrected source patient ID replaces the old one. Merge adds them.
+    Claims are kept per source table. Refresh replaces the claims a table
+    supplied before with the ones it supplies now, so reloading a corrected
+    table corrects its claim; claims from other tables, and claims added
+    outside the loader, remain. Merge adds to the table's claims. The exam's
+    ``asserted_patient_ids`` is their union, so the result does not depend on
+    the order in which tables are loaded.
     """
 
-    for accession, claims in claims_by_exam.items():
+    for accession, by_table in claims.items():
         exam = graph.exam(accession)
-        if exam is None or not claims:
+        supplied = {table: ids for table, ids in by_table.items() if ids}
+        if exam is None or not supplied:
             continue
-        if mode == "refresh":
-            graph.set_patient_claims(exam, claims)
-        else:
-            graph.claim_patient(exam, claims)
+        current = set(exam.asserted_patient_ids)
+        # Only claims the exam still asserts count; a caller may have removed some.
+        sources = {table: set(ids) & current for table, ids in getattr(exam, "_claim_sources", {}).items()}
+        untracked = current.difference(*sources.values())
+        for table, ids in supplied.items():
+            sources[table] = set(ids) if mode == "refresh" else sources.get(table, set()) | ids
+        graph.set_patient_claims(exam, untracked.union(*sources.values()))
+        graph.update(exam, _claim_sources={table: frozenset(ids) for table, ids in sources.items() if ids})
 
 
 def _group_rows(
@@ -890,6 +1025,63 @@ def _current(entity: Any, updates: Mapping[str, Any]) -> dict[str, Any]:
     """Return the entity's current values for the fields an update addresses."""
 
     return {name: getattr(entity, name, None) for name in updates}
+
+
+_ANATOMY_CODES = {
+    "location": "source_location_codes",
+    "depth": "source_depth_codes",
+    "distance": "source_distance_codes",
+}
+
+
+def _anatomy_inputs(
+    existing: Any,
+    fields: Mapping[str, Any],
+    conflicts: Mapping[str, bool],
+    mode: str,
+) -> dict[str, Any]:
+    """Return the anatomy codes after this snapshot, filling gaps from the finding.
+
+    A supplied component replaces the stored code (an explicit null clears it
+    in refresh). An absent column, or a null in merge, keeps the stored code.
+    """
+
+    result: dict[str, Any] = {}
+    for name, stored in _ANATOMY_CODES.items():
+        supplied = name in fields and (mode == "refresh" or conflicts.get(name) or fields[name] is not None)
+        if supplied:
+            result[name] = fields[name]
+        elif existing is not None:
+            result[name] = getattr(existing, stored, {}).get(name)
+    return result
+
+
+def _effective_side(
+    existing: Any,
+    fields: Mapping[str, Any],
+    conflicts: Mapping[str, bool],
+    laterality: Laterality,
+    mode: str,
+) -> Laterality:
+    """Return the side the finding has after this snapshot, for anatomy.
+
+    This mirrors how the laterality field itself is refreshed or merged: an
+    absent side column keeps the stored side, and merge turns a contradiction
+    into UNKNOWN.
+    """
+
+    if existing is None:
+        return laterality
+    if "laterality" not in fields:
+        return existing.laterality
+    if mode == "refresh" or conflicts.get("laterality"):
+        return laterality
+    current = existing.laterality
+    if laterality is Laterality.UNKNOWN:
+        return current
+    if current is Laterality.UNKNOWN or current is laterality:
+        return laterality
+    return Laterality.UNKNOWN
 
 
 def _finding_anatomy(

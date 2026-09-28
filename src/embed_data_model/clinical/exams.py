@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
 from embed_data_model.core.codes import Code
 from embed_data_model.core.entity import MutableEntity, Reference, readonly_mapping
@@ -179,6 +179,8 @@ class Exam(MutableEntity):
         self.linked_accessions = set(linked_accessions or ())
         self.registry_references = set(registry_references or ())
         self._owner_explicit = bool(owner_explicit)
+        # Which loader tables asserted which claims; see load_embed.
+        self._claim_sources: Dict[str, FrozenSet[str]] = {}
         self.metadata = dict(metadata or {})
         self.source = source
 
