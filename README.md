@@ -11,19 +11,19 @@ into a standard vocabulary or aggregate source values. Coded fields keep their
 source code next to its meaning, conflicting values are reported rather than
 silently resolved, and no diagnosis is inferred.
 
-The package is version `0.2.0`. Its distribution name is `embed-data-graph` and
+The package is version `0.3.0`. Its distribution name is `embed-data-graph` and
 its Python namespace is `embed_data_graph`. The source repository is
-[beatrice-b-m/embed-data-model](https://github.com/beatrice-b-m/embed-data-model).
+[beatrice-b-m/embed-data-graph](https://github.com/beatrice-b-m/embed-data-graph).
 
 ## Install from the checkout
 
-The current source release is tagged `v0.2.0`. From a clone, install the
+The current source release is tagged `v0.3.0`. From a clone, install the
 development environment at the repository root:
 
 ```bash
-git clone https://github.com/beatrice-b-m/embed-data-model.git
-cd embed-data-model
-git checkout v0.2.0
+git clone https://github.com/beatrice-b-m/embed-data-graph.git
+cd embed-data-graph
+git checkout v0.3.0
 uv sync --frozen
 uv run --frozen python -m examples.researcher_journeys
 ```
@@ -31,14 +31,14 @@ uv run --frozen python -m examples.researcher_journeys
 For a local consumer that needs an editable install, use:
 
 ```bash
-python -m pip install -e /path/to/embed-data-model
+python -m pip install -e /path/to/embed-data-graph
 ```
 
 To install the tagged source release into a downstream environment:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.0"
+  "git+https://github.com/beatrice-b-m/embed-data-graph.git@v0.3.0"
 ```
 
 For a reproducible source install from another revision, pin the exact commit
@@ -46,7 +46,7 @@ you qualified:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@<commit-sha>"
+  "git+https://github.com/beatrice-b-m/embed-data-graph.git@<commit-sha>"
 ```
 
 Replace `<commit-sha>` with the qualified revision and record it in the downstream

@@ -9,14 +9,14 @@ and the Python project lives at the repository root.
 For local development, install an editable checkout:
 
 ```bash
-python -m pip install -e /path/to/embed-data-model
+python -m pip install -e /path/to/embed-data-graph
 ```
 
 For a reproducible source dependency, use the release tag or a qualified commit SHA:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.0"
+  "git+https://github.com/beatrice-b-m/embed-data-graph.git@v0.3.0"
 ```
 
 If the consumer uses `uv`, configure the repository URL and exact revision as its
