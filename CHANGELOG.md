@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.2.1 — 2026-09-28
+
+Source release `v0.2.1`. This patch release fixes incremental loading and
+partitioning: later tables and partial extracts no longer overwrite patient
+claims, anatomy or dated attributes loaded earlier, and partitions keep the
+records and links that belong to their patients. It adds an opt-in
+`parents="existing"` mode to `load_embed`; the default behavior of documented
+APIs is unchanged apart from the fixes below. Python 3.9–3.13 support and the
+absence of mandatory runtime dependencies are unchanged.
+
 ### Added
 
 - `load_embed(..., parents="existing")` loads whole tables into a subset graph
