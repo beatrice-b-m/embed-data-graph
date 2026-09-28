@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-28
+
+Source release `v0.3.0`. This release renames the project to EMBED Data Graph.
+It is breaking only in name: the distribution, the import namespace and the
+repository change, and the public API, loading behavior, Python 3.9–3.13
+support and the absence of mandatory runtime dependencies are unchanged. The
+Changed section gives the migration steps.
 
 ### Changed
 
