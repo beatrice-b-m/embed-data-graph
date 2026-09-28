@@ -446,7 +446,9 @@ loader does not invent frame indices or clinical correspondence.
 Derivatives require an explicit model `image_id` and `derived_from`. Their
 metadata and ROIs do not replace the original source image or its source-path
 lookups. Images with an accession can establish an exam shell and source patient
-claim; an image row without clinical context remains image-local.
+claim; an image row without clinical context remains image-local. A claim from
+the image table sits beside claims from clinical tables: loading images later
+cannot re-parent an exam, and a disagreement leaves the exam unowned.
 
 ## Selection, validation, partitioning, and movement
 

@@ -12,6 +12,16 @@
   address. Previously, loading a full image table into a partition re-grew it
   with placeholder exams unless the rows were filtered first.
 
+### Fixed
+
+- Loading images, procedures or pathology after MagView no longer replaces the
+  exam's patient claims. Claims are kept per source table, and refresh replaces
+  only the claims of the table being reloaded. Previously the last table loaded
+  won: an image path naming another patient could re-parent an exam or hide a
+  conflict, and the result depended on load order. `set_patient_claims` still
+  replaces every claim. An image row whose patient column disagrees with its
+  path is reported as `source_patient_path_mismatch`.
+
 ## 0.2.0 — 2026-09-23
 
 Source release `v0.2.0`. This release aligns the model with the EMBED
