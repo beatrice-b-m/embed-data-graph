@@ -34,7 +34,7 @@ behavior, and observed behavior.
 
 ## Public API and compatibility
 
-The current version is `0.2.0`. Pin an exact source revision or a qualified wheel
+The current version is `0.2.1`. Pin an exact source revision or a qualified wheel
 and record that dependency in the consumer's lockfile or environment specification.
 The [README](README.md) documents installation from the tagged source release.
 

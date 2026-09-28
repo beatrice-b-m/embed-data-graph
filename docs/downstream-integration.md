@@ -16,7 +16,7 @@ For a reproducible source dependency, use the release tag or a qualified commit 
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.0"
+  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.1"
 ```
 
 If the consumer uses `uv`, configure the repository URL and exact revision as its

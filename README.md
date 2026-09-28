@@ -5,19 +5,19 @@ mammography data as mutable objects. It can load any supported subset of EMBED
 tables, retain the relationships that the rows actually establish, and leave
 project-specific analysis to downstream code.
 
-The package is version `0.2.0`. Its distribution name is `embed-data-model` and
+The package is version `0.2.1`. Its distribution name is `embed-data-model` and
 its Python namespace is `embed_data_model`. The source repository is
 [beatrice-b-m/embed-data-model](https://github.com/beatrice-b-m/embed-data-model).
 
 ## Install from the checkout
 
-The current source release is tagged `v0.2.0`. From a clone, install the
+The current source release is tagged `v0.2.1`. From a clone, install the
 development environment at the repository root:
 
 ```bash
 git clone https://github.com/beatrice-b-m/embed-data-model.git
 cd embed-data-model
-git checkout v0.2.0
+git checkout v0.2.1
 uv sync --frozen
 uv run --frozen python -m examples.researcher_journeys
 ```
@@ -32,7 +32,7 @@ To install the tagged source release into a downstream environment:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.0"
+  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.1"
 ```
 
 For a reproducible source install from another revision, pin the exact commit
