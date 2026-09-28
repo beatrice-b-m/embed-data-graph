@@ -106,7 +106,8 @@ exam is not loaded. Skipped rows are counted in one INFO issue per table with
 code `rows_outside_graph` and context `{"table": ..., "rows": ...}`.
 
 Managed fields by grain (bound mapped fields only): patient sex/birth_year, recorded
-per exam context as attribute observations;
+per exam context as attribute observations (a row without the date column
+addresses its accession's one dated context);
 exam exam_date/description; finding laterality/finding_type/interpretation/anatomy,
 source anatomy codes/descriptors/record_type; image laterality/view/modality,
 source modality/derived type, dimensions/frame_count, study/series IDs and coordinate

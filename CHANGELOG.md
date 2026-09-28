@@ -21,6 +21,14 @@
   conflict, and the result depended on load order. `set_patient_claims` still
   replaces every claim. An image row whose patient column disagrees with its
   path is reported as `source_patient_path_mismatch`.
+- Partial finding extracts keep the anatomy they do not supply. A row with only
+  distance or location no longer resets the finding's side and depth to
+  unknown, and a side-only correction now moves the anatomical position to the
+  new side instead of leaving it on the old one. MagView side and a narrow
+  location table give the same position in either load order.
+- A patient-attribute correction without the exam-date column replaces the
+  observation for its accession's dated context. Previously it added a second,
+  undated observation and the scalar attribute became unknown.
 
 ## 0.2.0 — 2026-09-23
 

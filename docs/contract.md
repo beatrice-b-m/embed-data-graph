@@ -69,7 +69,11 @@ issues. Callers assemble complete groups before applying streamed refreshes.
 Default refresh updates existing objects in place and replaces bound
 adapter-managed scalar fields whose columns the rows supply, including explicitly
 null values. A column absent from every row of a grain leaves its field
-unchanged, so partial tables and extracts can be loaded progressively. It preserves Python
+unchanged, so partial tables and extracts can be loaded progressively. This holds
+for composite values too: a finding's anatomical position is derived from the
+supplied side, location, depth and distance plus the stored values of any it
+omits, and a patient-attribute row without the exam-date column addresses the
+dated context its accession already has. It preserves Python
 references, subclasses, consumer attributes and metadata, unbound fields, and
 unsupplied child grains. Child-only loads ensure parent objects without resetting
 their scalar fields. Explicit merge applies non-null values. Complementary rows
