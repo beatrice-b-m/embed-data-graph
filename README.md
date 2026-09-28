@@ -5,8 +5,8 @@ mammography data as mutable objects. It can load any supported subset of EMBED
 tables, retain the relationships that the rows actually establish, and leave
 project-specific analysis to downstream code.
 
-The package is version `0.2.0`. Its distribution name is `embed-data-model` and
-its Python namespace is `embed_data_model`. The source repository is
+The package is version `0.2.0`. Its distribution name is `embed-data-graph` and
+its Python namespace is `embed_data_graph`. The source repository is
 [beatrice-b-m/embed-data-model](https://github.com/beatrice-b-m/embed-data-model).
 
 ## Install from the checkout
@@ -54,7 +54,7 @@ graph from one MagView-like row, edits the live exam, and makes an independent
 partition for a downstream analysis. It does not require private EMBED data.
 
 ```python
-from embed_data_model import DatasetGraph, Laterality, load_embed, validate
+from embed_data_graph import DatasetGraph, Laterality, load_embed, validate
 
 
 graph = DatasetGraph()

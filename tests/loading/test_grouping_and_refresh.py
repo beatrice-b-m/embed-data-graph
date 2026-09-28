@@ -3,7 +3,7 @@ from itertools import permutations
 import pandas as pd
 import pytest
 
-from embed_data_model import DatasetGraph, Exam, Finding, Laterality, load_embed
+from embed_data_graph import DatasetGraph, Exam, Finding, Laterality, load_embed
 
 
 @pytest.mark.parametrize("index", [None, [0,0], ["x","x"], pd.MultiIndex.from_tuples([("a",1),("a",1)])])
@@ -91,7 +91,7 @@ def test_supplied_generators_are_consumed_once():
             yield {"empi_anon":"P"}
     assert load_embed(patients=Once()).graph.patient("P") is not None
 def test_interpretation_without_diagnostics_refreshes_in_place_and_respects_unbinding():
-    from embed_data_model import load_embed
+    from embed_data_graph import load_embed
     graph = load_embed(findings=[{"acc_anon": "A", "numfind": 1, "asses": "S", "recc": "B"}]).graph
     interpretation = graph.findings[0].interpretation
     assert interpretation.assessment.code == "S" and interpretation.sources == ()

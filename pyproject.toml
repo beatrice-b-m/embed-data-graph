@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "embed-data-model"
+name = "embed-data-graph"
 version = "0.2.0"
 description = "A Python object model for EMBED clinical and mammography data"
 readme = "README.md"
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [tool.setuptools.package-data]
-embed_data_model = ["py.typed"]
+embed_data_graph = ["py.typed"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -34,7 +34,7 @@ pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.9"
-files = ["src/embed_data_model", "tests/typing"]
+files = ["src/embed_data_graph", "tests/typing"]
 mypy_path = "src"
 follow_imports = "normal"
 disallow_untyped_defs = true

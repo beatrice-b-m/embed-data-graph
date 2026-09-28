@@ -2,7 +2,7 @@
 import pytest
 
 from benchmarks.graph_loading import assert_cardinality, fixture
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 @pytest.mark.parametrize("size", [10, 20, 40])

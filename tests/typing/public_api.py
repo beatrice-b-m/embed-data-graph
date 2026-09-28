@@ -2,11 +2,11 @@
 from typing import Optional, Tuple
 from typing_extensions import assert_type
 
-from embed_data_model import (
+from embed_data_graph import (
     DatasetGraph, Exam, Finding, Laterality, LoadReport,
     MammogramImage, Patient, Pathology, RegionOfInterest, load_embed,
 )
-from embed_data_model.core.selection import Selection
+from embed_data_graph.core.selection import Selection
 
 
 class ResearchPatient(Patient):

@@ -2,7 +2,7 @@
 
 import json
 
-from embed_data_model import (
+from embed_data_graph import (
     DatasetGraph,
     Exam,
     Finding,

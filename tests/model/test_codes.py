@@ -2,8 +2,8 @@
 
 import pytest
 
-from embed_data_model import Code
-from embed_data_model.core.codes import Vocabulary
+from embed_data_graph import Code
+from embed_data_graph.core.codes import Vocabulary
 
 TABLE = Vocabulary("demo", {"B": "Biopsy", "U": "An ultrasound exam"}, delimited=True)
 

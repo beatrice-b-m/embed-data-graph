@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import (
+from embed_data_graph import (
     CancerRegistryEntry,
     DatasetGraph,
     Exam,

@@ -1,11 +1,11 @@
 """Quality inspection is optional, read-only, and composes with owning partitions."""
-from embed_data_model import DatasetGraph, Exam, MammogramImage, Patient, RegionOfInterest
-from embed_data_model.core.source import Issue, IssueSeverity
-from embed_data_model.core.validation import validate
+from embed_data_graph import DatasetGraph, Exam, MammogramImage, Patient, RegionOfInterest
+from embed_data_graph.core.source import Issue, IssueSeverity
+from embed_data_graph.core.validation import validate
 
 
 def test_invalid_raw_pathology_severity_remains_available_to_validation():
-    from embed_data_model import Pathology
+    from embed_data_graph import Pathology
     record = Pathology("P", "record", raw_severity=9)
     assert record.raw_severity == 9
     assert "pathology_raw_severity" in {issue.code for issue in validate(record).issues}
@@ -53,7 +53,7 @@ def test_validation_partition_copies_selected_descendants():
 
 
 def test_shared_descendant_is_validated_once():
-    from embed_data_model import Finding, Laterality, Procedure, ProcedureIdentity
+    from embed_data_graph import Finding, Laterality, Procedure, ProcedureIdentity
     exam = Exam("A")
     proc = Procedure(ProcedureIdentity("P", "2020-01-01", "biopsy", Laterality.LEFT))
     for number in ("1", "2"):

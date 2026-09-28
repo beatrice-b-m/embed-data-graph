@@ -1,5 +1,5 @@
 """Small mutable public-API example; run from the installed project environment."""
-from embed_data_model import load_embed, validate
+from embed_data_graph import load_embed, validate
 
 
 def main() -> None:

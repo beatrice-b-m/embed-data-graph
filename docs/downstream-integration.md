@@ -1,7 +1,7 @@
 # Downstream integration guide
 
 Use this guide to integrate EMBED Data Model into a research application.
-The distribution is `embed-data-model`, the Python namespace is `embed_data_model`,
+The distribution is `embed-data-graph`, the Python namespace is `embed_data_graph`,
 and the Python project lives at the repository root.
 
 ## Install and pin the dependency
@@ -34,9 +34,9 @@ The root facade is the preferred import boundary for common types:
 Use specialist modules for mappings and types outside the root exports:
 
 ```python
-from embed_data_model import DatasetGraph, load_embed, validate
-from embed_data_model.clinical.findings import Finding
-from embed_data_model.sources.embed.columns import DEFAULT_COLUMNS
+from embed_data_graph import DatasetGraph, load_embed, validate
+from embed_data_graph.clinical.findings import Finding
+from embed_data_graph.sources.embed.columns import DEFAULT_COLUMNS
 
 assert DEFAULT_COLUMNS["patients"]["patient_id"] == "empi_anon"
 ```
@@ -63,7 +63,7 @@ columns["findings"]["finding_number"] = "finding_no"
 Use `None` to unbind an optional semantic field from an adapter. Required
 identity fields cannot be unbound. The mapping is partial: unspecified fields
 keep their defaults. The complete current default map is available from
-`embed_data_model.sources.embed.columns.DEFAULT_COLUMNS` and is summarized in
+`embed_data_graph.sources.embed.columns.DEFAULT_COLUMNS` and is summarized in
 the [user guide](user-guide.md).
 
 This complete example uses a renamed DataFrame schema and demonstrates the
@@ -72,7 +72,7 @@ expected result:
 ```python
 import pandas as pd
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 patients = pd.DataFrame(
@@ -142,7 +142,7 @@ collections represent the same event.
 These rules make the following results intentional:
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 graph = load_embed(exams=[{"acc_anon": "A-001", "desc": "screening"}]).graph
@@ -198,7 +198,7 @@ Use a synthetic repeated-row fixture to check that source-row multiplicity
 does not become object multiplicity:
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 rows = [
@@ -248,7 +248,7 @@ procedure or ambiguous pathology key should remain visible in
 
 Before accepting a consumer integration:
 
-1. Use `embed_data_model` for runtime and test imports.
+1. Use `embed_data_graph` for runtime and test imports.
 2. Run package development commands from the repository root, as documented in
    [CONTRIBUTING.md](../CONTRIBUTING.md).
 3. Compare custom `columns` maps with `DEFAULT_COLUMNS`; verify semantic and

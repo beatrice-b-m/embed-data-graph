@@ -1,6 +1,6 @@
 """Exam, patient and finding features loaded from MagView rows."""
 
-from embed_data_model import load_embed, validate
+from embed_data_graph import load_embed, validate
 
 
 def row(**fields):

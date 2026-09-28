@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-TARGET = Path(__file__).resolve().parents[1] / "src" / "embed_data_model" / "sources" / "embed" / "vocabulary.py"
+TARGET = Path(__file__).resolve().parents[1] / "src" / "embed_data_graph" / "sources" / "embed" / "vocabulary.py"
 
 # (constant name, catalog feature, description)
 FEATURES: List[Tuple[str, str, str]] = [
@@ -72,7 +72,7 @@ Regenerate from the catalog rather than editing a table by hand.
 
 from __future__ import annotations
 
-from embed_data_model.core.codes import Vocabulary
+from embed_data_graph.core.codes import Vocabulary
 
 PRESENCE = Vocabulary("presence", {{"0": "Not represented", "1": "Represented"}})
 """Presence flags (mass, asymmetry, arch_distortion, calc): 0 or 1."""

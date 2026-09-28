@@ -1,6 +1,6 @@
 import math
 import pytest
-from embed_data_model import MammogramImage, RegionOfInterest, ImageModality
+from embed_data_graph import MammogramImage, RegionOfInterest, ImageModality
 
 
 def roi(coordinates, *, image_id="img-1", source_value="0", **fields):

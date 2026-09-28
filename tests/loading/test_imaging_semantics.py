@@ -1,6 +1,6 @@
 """EMBED image-metadata semantics honoured by the loader."""
 
-from embed_data_model import ImageModality, load_embed
+from embed_data_graph import ImageModality, load_embed
 
 
 def image_row(**fields):

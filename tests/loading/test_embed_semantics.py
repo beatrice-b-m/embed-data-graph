@@ -6,7 +6,7 @@ synthetic rows only.
 
 import pytest
 
-from embed_data_model import Laterality, load_embed
+from embed_data_graph import Laterality, load_embed
 
 
 def magview_row(**fields):
@@ -78,8 +78,8 @@ def test_negative_distance_is_an_exceptional_code_not_a_measurement(sentinel):
 
 
 def test_validation_rejects_a_negative_distance_supplied_directly():
-    from embed_data_model import Finding, validate
-    from embed_data_model.core.anatomy import AnatomicalPosition, Quadrant
+    from embed_data_graph import Finding, validate
+    from embed_data_graph.core.anatomy import AnatomicalPosition, Quadrant
 
     position = AnatomicalPosition(
         laterality=Laterality.LEFT,

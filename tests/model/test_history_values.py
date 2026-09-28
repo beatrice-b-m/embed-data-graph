@@ -4,13 +4,13 @@ from copy import deepcopy
 
 import pytest
 
-from embed_data_model import Code, Patient, validate
-from embed_data_model.clinical.histories import (
+from embed_data_graph import Code, Patient, validate
+from embed_data_graph.clinical.histories import (
     HistoryTimeEstimate,
     MedicationHistoryObservation,
     ProcedureHistoryObservation,
 )
-from embed_data_model.core.primitives import Laterality
+from embed_data_graph.core.primitives import Laterality
 
 
 def medication(code="ESTRO", **fields):

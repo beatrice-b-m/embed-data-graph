@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from embed_data_model import Finding, Laterality, MammogramImage, RegionOfInterest, ViewPosition
-from embed_data_model.clinical.findings import FindingNormalizationWarning, FindingRecordType
-from embed_data_model.core.anatomy import AnatomicalPosition, ClockFacePosition, Quadrant
-from embed_data_model.imaging.rois import Box
+from embed_data_graph import Finding, Laterality, MammogramImage, RegionOfInterest, ViewPosition
+from embed_data_graph.clinical.findings import FindingNormalizationWarning, FindingRecordType
+from embed_data_graph.core.anatomy import AnatomicalPosition, ClockFacePosition, Quadrant
+from embed_data_graph.imaging.rois import Box
 
 
 def test_finding_key_is_accession_and_number_with_side_as_an_attribute():

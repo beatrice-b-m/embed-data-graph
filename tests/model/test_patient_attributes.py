@@ -4,8 +4,8 @@ from datetime import date
 
 import pytest
 
-from embed_data_model import Patient
-from embed_data_model.clinical.attributes import PatientAttributeObservation
+from embed_data_graph import Patient
+from embed_data_graph.clinical.attributes import PatientAttributeObservation
 
 
 def observation(value, accession, day):

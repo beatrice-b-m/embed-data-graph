@@ -1,1 +1,1 @@
-"""Shared pytest configuration; tests import the installed ``embed_data_model``."""
+"""Shared pytest configuration; tests import the installed ``embed_data_graph``."""
