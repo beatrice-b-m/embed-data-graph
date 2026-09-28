@@ -1,4 +1,4 @@
-# EMBED Data Model user guide
+# EMBED Data Graph user guide
 
 This guide describes the mutable object model and the source-table adapter.
 The Python project is at the repository root and is installed as

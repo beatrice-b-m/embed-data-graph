@@ -1,9 +1,15 @@
-# EMBED Data Model
+# EMBED Data Graph
 
-EMBED Data Model is a small Python library for representing clinical and
-mammography data as mutable objects. It can load any supported subset of EMBED
-tables, retain the relationships that the rows actually establish, and leave
-project-specific analysis to downstream code.
+EMBED Data Graph is a small Python library that builds a graph of the clinical
+and mammography objects that EMBED table rows describe: patients, exams,
+findings, procedures, pathology, images and ROIs. It can load any supported
+subset of EMBED tables, retain the relationships that the rows actually
+establish, and leave project-specific analysis to downstream code.
+
+It is not a common data model. Unlike OMOP-style schemas, it does not map EMBED
+into a standard vocabulary or aggregate source values. Coded fields keep their
+source code next to its meaning, conflicting values are reported rather than
+silently resolved, and no diagnosis is inferred.
 
 The package is version `0.2.0`. Its distribution name is `embed-data-graph` and
 its Python namespace is `embed_data_graph`. The source repository is
@@ -152,6 +158,6 @@ downstream repositories or consumer code. Synthetic checks establish object
 behavior; private-data, real-pixel, and scientific qualification require their
 own evidence.
 
-Start with the [documentation index](docs/README.md). The [data model
+Start with the [documentation index](docs/README.md). The [library
 contract](docs/contract.md) and [API reference](docs/api.md) define supported
 behavior.

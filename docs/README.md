@@ -3,7 +3,7 @@
 Start with the repository [README](../README.md) for installation and a short
 quickstart, then use the [user guide](user-guide.md) for runnable examples.
 
-- [Data model contract](contract.md) — scope, clinical structure, identity,
+- [Library contract](contract.md) — scope, clinical structure, identity,
   loading, mutation, graph membership, and validation.
 - [API reference](api.md) — method and field semantics, refresh/merge rules,
   image and ROI identities, pathology keys, and supplied relationships.

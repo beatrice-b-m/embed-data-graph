@@ -1,4 +1,4 @@
-# Contributing to EMBED Data Model
+# Contributing to EMBED Data Graph
 
 This library supplies reusable clinical and imaging objects and EMBED table
 adapters. Downstream repositories own research workflows, outcome definitions,

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "embed-data-graph"
 version = "0.2.0"
-description = "A Python object model for EMBED clinical and mammography data"
+description = "A graph of the clinical and mammography objects described by EMBED tables"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

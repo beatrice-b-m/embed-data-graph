@@ -1,6 +1,6 @@
 # Downstream integration guide
 
-Use this guide to integrate EMBED Data Model into a research application.
+Use this guide to integrate EMBED Data Graph into a research application.
 The distribution is `embed-data-graph`, the Python namespace is `embed_data_graph`,
 and the Python project lives at the repository root.
 

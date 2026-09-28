@@ -1,7 +1,8 @@
-# EMBED Data Model
+# EMBED Data Graph
 
-A Python object model for Emory Breast Imaging Dataset (EMBED) clinical and
-mammography data. The distribution is `embed-data-graph`; import
+A Python library that builds a graph of the clinical and mammography objects
+described by Emory Breast Imaging Dataset (EMBED) tables. It is not a common
+data model. The distribution is `embed-data-graph`; import
 `embed_data_graph`. The Python project lives at the repository root. See
 `README.md` for researcher entry points and `CONTRIBUTING.md` for development
 and compatibility expectations.

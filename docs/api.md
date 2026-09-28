@@ -1,4 +1,4 @@
-# EMBED Data Model API reference
+# EMBED Data Graph API reference
 
 This reference specifies the behavior defined by the [contract](contract.md).
 See the [user guide](user-guide.md) for runnable examples.

@@ -1,4 +1,4 @@
-# EMBED Data Model contract
+# EMBED Data Graph contract
 
 This document defines the library's scope and behavior. The [API reference](api.md)
 specifies method, identity, and loading semantics; the [user guide](user-guide.md)
@@ -6,9 +6,12 @@ provides runnable examples.
 
 ## Scope and clinical structure
 
-EMBED Data Model represents clinical and mammography data as mutable objects.
+EMBED Data Graph represents clinical and mammography data as mutable objects.
 It supports FFDM, DBT, and synthetic 2D, with optional EMBED table adapters.
 Ultrasound and MRI are outside the supported imaging scope.
+It is not a common data model: the adapters translate source rows into objects
+and the relationships those rows establish, without mapping them into a target
+schema or a standard vocabulary.
 
 The clinical containment path is patient → exam → finding → procedure → pathology.
 Exams also expose images and supplied registry associations; images contain ROIs.
