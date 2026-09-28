@@ -4,12 +4,12 @@ from itertools import permutations
 
 import pytest
 
-from embed_data_model.clinical.exams import Exam
-from embed_data_model.clinical.findings import Finding
-from embed_data_model.clinical.patients import Patient
-from embed_data_model.core.graph import DatasetGraph
-from embed_data_model import load_embed
-from embed_data_model.sources.embed.columns import resolve_columns
+from embed_data_graph.clinical.exams import Exam
+from embed_data_graph.clinical.findings import Finding
+from embed_data_graph.clinical.patients import Patient
+from embed_data_graph.core.graph import DatasetGraph
+from embed_data_graph import load_embed
+from embed_data_graph.sources.embed.columns import resolve_columns
 
 
 def test_out_of_range_severity_is_kept_raw_for_validation():

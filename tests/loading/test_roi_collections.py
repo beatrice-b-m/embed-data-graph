@@ -1,6 +1,6 @@
 import pytest
 
-from embed_data_model import DatasetGraph, MammogramImage, RegionOfInterest, load_embed
+from embed_data_graph import DatasetGraph, MammogramImage, RegionOfInterest, load_embed
 
 PATH = "/data/cohort1/P/study/series/SOP.dcm"
 

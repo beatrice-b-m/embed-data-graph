@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import Code, load_embed
+from embed_data_graph import Code, load_embed
 
 
 def load_procedure_history(**row):

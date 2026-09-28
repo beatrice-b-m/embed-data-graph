@@ -1,23 +1,29 @@
-# EMBED Data Model
+# EMBED Data Graph
 
-EMBED Data Model is a small Python library for representing clinical and
-mammography data as mutable objects. It can load any supported subset of EMBED
-tables, retain the relationships that the rows actually establish, and leave
-project-specific analysis to downstream code.
+EMBED Data Graph is a small Python library that builds a graph of the clinical
+and mammography objects that EMBED table rows describe: patients, exams,
+findings, procedures, pathology, images and ROIs. It can load any supported
+subset of EMBED tables, retain the relationships that the rows actually
+establish, and leave project-specific analysis to downstream code.
 
-The package is version `0.2.1`. Its distribution name is `embed-data-model` and
-its Python namespace is `embed_data_model`. The source repository is
-[beatrice-b-m/embed-data-model](https://github.com/beatrice-b-m/embed-data-model).
+It is not a common data model. Unlike OMOP-style schemas, it does not map EMBED
+into a standard vocabulary or aggregate source values. Coded fields keep their
+source code next to its meaning, conflicting values are reported rather than
+silently resolved, and no diagnosis is inferred.
+
+The package is version `0.3.0`. Its distribution name is `embed-data-graph` and
+its Python namespace is `embed_data_graph`. The source repository is
+[beatrice-b-m/embed-data-graph](https://github.com/beatrice-b-m/embed-data-graph).
 
 ## Install from the checkout
 
-The current source release is tagged `v0.2.1`. From a clone, install the
+The current source release is tagged `v0.3.0`. From a clone, install the
 development environment at the repository root:
 
 ```bash
-git clone https://github.com/beatrice-b-m/embed-data-model.git
-cd embed-data-model
-git checkout v0.2.1
+git clone https://github.com/beatrice-b-m/embed-data-graph.git
+cd embed-data-graph
+git checkout v0.3.0
 uv sync --frozen
 uv run --frozen python -m examples.researcher_journeys
 ```
@@ -25,14 +31,14 @@ uv run --frozen python -m examples.researcher_journeys
 For a local consumer that needs an editable install, use:
 
 ```bash
-python -m pip install -e /path/to/embed-data-model
+python -m pip install -e /path/to/embed-data-graph
 ```
 
 To install the tagged source release into a downstream environment:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@v0.2.1"
+  "git+https://github.com/beatrice-b-m/embed-data-graph.git@v0.3.0"
 ```
 
 For a reproducible source install from another revision, pin the exact commit
@@ -40,7 +46,7 @@ you qualified:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-model.git@<commit-sha>"
+  "git+https://github.com/beatrice-b-m/embed-data-graph.git@<commit-sha>"
 ```
 
 Replace `<commit-sha>` with the qualified revision and record it in the downstream
@@ -54,7 +60,7 @@ graph from one MagView-like row, edits the live exam, and makes an independent
 partition for a downstream analysis. It does not require private EMBED data.
 
 ```python
-from embed_data_model import DatasetGraph, Laterality, load_embed, validate
+from embed_data_graph import DatasetGraph, Laterality, load_embed, validate
 
 
 graph = DatasetGraph()
@@ -152,6 +158,6 @@ downstream repositories or consumer code. Synthetic checks establish object
 behavior; private-data, real-pixel, and scientific qualification require their
 own evidence.
 
-Start with the [documentation index](docs/README.md). The [data model
+Start with the [documentation index](docs/README.md). The [library
 contract](docs/contract.md) and [API reference](docs/api.md) define supported
 behavior.

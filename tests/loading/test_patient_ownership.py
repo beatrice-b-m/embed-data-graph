@@ -1,6 +1,6 @@
 """Source patient claims on exams across loads."""
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 def test_refresh_replaces_a_corrected_patient_claim():

@@ -1,7 +1,7 @@
 """EMBED pathology severity groups."""
 
-from embed_data_model import load_embed
-from embed_data_model.clinical.pathology import PathologySeverity
+from embed_data_graph import load_embed
+from embed_data_graph.clinical.pathology import PathologySeverity
 
 
 def test_severity_codes_carry_their_inverse_clinical_meaning():

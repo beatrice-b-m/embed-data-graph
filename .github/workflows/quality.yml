@@ -40,6 +40,6 @@ jobs:
       - name: Synchronize locked environment
         run: uv sync --frozen
       - name: Run Ruff
-        run: uv run --frozen ruff check src/embed_data_model tests examples benchmarks tools
+        run: uv run --frozen ruff check src/embed_data_graph tests examples benchmarks tools
       - name: Type-check the complete package
         run: uv run --frozen mypy

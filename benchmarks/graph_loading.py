@@ -10,7 +10,7 @@ import tracemalloc
 from time import perf_counter
 from typing import Any, Dict
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 def fixture(patient_count: int) -> Dict[str, list[dict[str, Any]]]:

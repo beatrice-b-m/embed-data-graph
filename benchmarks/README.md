@@ -1,4 +1,4 @@
-# EMBED Data Model loading measurements
+# EMBED Data Graph loading measurements
 
 Measured 2026-09-23 against `b180feb` on branch `refactor/catalog-alignment`.
 Python 3.13.11, macOS-26.5.1-arm64-arm-64bit-Mach-O.

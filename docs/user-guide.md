@@ -1,8 +1,8 @@
-# EMBED Data Model user guide
+# EMBED Data Graph user guide
 
 This guide describes the mutable object model and the source-table adapter.
 The Python project is at the repository root and is installed as
-`embed-data-model`; import `embed_data_model`. Start with
+`embed-data-graph`; import `embed_data_graph`. Start with
 the repository [README](../README.md), then use the
 [documentation index](README.md) for contracts and integration guidance.
 
@@ -15,7 +15,7 @@ EMBED files.
 The root facade exports the common working types:
 
 ```python
-from embed_data_model import (
+from embed_data_graph import (
     BreastSide,
     Box,
     CancerRegistryEntry,
@@ -44,7 +44,7 @@ The source adapter's complete default table map is intentionally available in
 its specialist module rather than on the root facade:
 
 ```python
-from embed_data_model.sources.embed.columns import DEFAULT_COLUMNS
+from embed_data_graph.sources.embed.columns import DEFAULT_COLUMNS
 
 assert DEFAULT_COLUMNS["patients"]["patient_id"] == "empi_anon"
 assert DEFAULT_COLUMNS["findings"]["finding_number"] == "numfind"
@@ -63,7 +63,7 @@ a child to an object that has no graph yet creates one; registering the patient
 into another graph moves the whole tree.
 
 ```python
-from embed_data_model import DatasetGraph, Exam, Finding, Laterality, Patient
+from embed_data_graph import DatasetGraph, Exam, Finding, Laterality, Patient
 
 
 class ResearchExam(Exam):
@@ -118,7 +118,7 @@ generators, and DataFrame-like values. It returns a `LoadReport` with:
 This complete synthetic load creates one patient, one exam, and one finding:
 
 ```python
-from embed_data_model import DatasetGraph, Laterality, load_embed
+from embed_data_graph import DatasetGraph, Laterality, load_embed
 
 
 graph = DatasetGraph()
@@ -171,7 +171,7 @@ type, visit type and modality, the finding descriptors, procedure type and the
 pathology descriptor slots:
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 row = {"empi_anon": "P-1", "acc_anon": "A-1", "numfind": 1, "side": "L", "asses": "S",
        "recc": "B,U", "massshape": "O", "tissueden": 3}
@@ -189,7 +189,7 @@ A `Code` compares by its code, never by meaning, and never equals a plain
 string: compare `.code` or `.meaning`. Comma-separated codes list their parts in
 `tokens` and compare regardless of order. A code the dictionary does not explain
 keeps its `code` with `meaning` None, and `is_known` is False. The tables live in
-`embed_data_model.sources.embed.vocabulary` and are generated from the EMBED
+`embed_data_graph.sources.embed.vocabulary` and are generated from the EMBED
 catalog by `tools/generate_embed_vocabulary.py`.
 
 ## Patient attributes over time
@@ -203,7 +203,7 @@ later information does not leak into an earlier analysis:
 ```python
 from datetime import date
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 rows = [
     {"empi_anon": "P-9", "acc_anon": "A-1", "numfind": 1, "studydate_anon": "2020-01-01", "GENDER_DESC": "F"},
@@ -233,7 +233,7 @@ contains an issue. Merge does not
 guess equality for unkeyed history facts or for revised ROI collections.
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 graph = load_embed(exams=[{"acc_anon": "A-001", "desc": "screening"}]).graph
@@ -275,7 +275,7 @@ explicitly unbound with `None`. Required identity fields cannot be unbound.
 ```python
 import pandas as pd
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 patients = pd.DataFrame(
@@ -337,7 +337,7 @@ resolve in either arrival order and can remain pending when an endpoint has not
 been loaded:
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 graph = load_embed(
@@ -407,7 +407,7 @@ old ROI references should be saved before replacement. This behavior applies
 in both refresh and merge modes.
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 path = "/data/cohort1/P-001/study-1/series-1/SOP-001.dcm"
@@ -465,7 +465,7 @@ procedure, pathology, image, ROI, and registry.
 Validation is separate from loading and selection:
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 graph = load_embed(
@@ -501,7 +501,7 @@ would add every exam in that table. Pass `parents="existing"` to attach rows to
 the subset only:
 
 ```python
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 clinical = load_embed(
@@ -559,7 +559,7 @@ Run from the repository root:
 ```bash
 uv sync --frozen
 uv run --frozen pytest
-uv run --frozen ruff check src/embed_data_model tests examples benchmarks tools
+uv run --frozen ruff check src/embed_data_graph tests examples benchmarks tools
 uv run --frozen mypy
 uv run --frozen python -m examples.researcher_journeys
 ```

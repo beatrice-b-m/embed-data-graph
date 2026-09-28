@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-28
+
+Source release `v0.3.0`. This release renames the project to EMBED Data Graph.
+It is breaking only in name: the distribution, the import namespace and the
+repository change, and the public API, loading behavior, Python 3.9–3.13
+support and the absence of mandatory runtime dependencies are unchanged. The
+Changed section gives the migration steps.
+
+### Changed
+
+- The project is renamed from EMBED Data Model to EMBED Data Graph. The
+  distribution is now `embed-data-graph` and the Python namespace is now
+  `embed_data_graph`. The source repository moves to
+  `beatrice-b-m/embed-data-graph`. The old name suggested a common data model
+  such as OMOP. The library builds a graph of the objects that EMBED rows
+  describe and does not map them into a target schema. The API is otherwise
+  unchanged.
+
+  This is a breaking change with no compatibility shim: `embed_data_model` can
+  no longer be imported. To migrate:
+
+  1. Replace the `embed-data-model` dependency with `embed-data-graph`, pinned
+     to the new tag or commit from
+     `https://github.com/beatrice-b-m/embed-data-graph.git`.
+  2. Replace every `embed_data_model` import with `embed_data_graph`, including
+     submodules such as `embed_data_graph.sources.embed.columns`.
+  3. Reinstall into existing environments. An editable install of the old
+     distribution does not provide the new namespace.
 
 ## 0.2.1 — 2026-09-28
 

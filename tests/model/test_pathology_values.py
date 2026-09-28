@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model.clinical.pathology import PathologyObservation
+from embed_data_graph.clinical.pathology import PathologyObservation
 
 
 def test_descriptor_occurrences_keep_their_slot_and_repeated_values():

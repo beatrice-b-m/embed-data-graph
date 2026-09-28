@@ -19,11 +19,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SMOKE = """
 from pathlib import Path
 from importlib.metadata import version
-import embed_data_model
-from embed_data_model import load_embed
+import embed_data_graph
+from embed_data_graph import load_embed
 
-assert "site-packages" in Path(embed_data_model.__file__).as_posix()
-assert embed_data_model.__version__ == version("embed-data-model")
+assert "site-packages" in Path(embed_data_graph.__file__).as_posix()
+assert embed_data_graph.__version__ == version("embed-data-graph")
 graph = load_embed(magview=[{"empi_anon": "P", "acc_anon": "A", "numfind": 1, "side": "L"}]).graph
 assert graph.exam("A").findings == (graph.finding("A", "1"),)
 """
@@ -64,10 +64,10 @@ def installed(tmp_path_factory):
 def test_archives_contain_package_typing_marker_and_license(installed):
     with ZipFile(installed["wheel"]) as archive:
         names = archive.namelist()
-    assert "embed_data_model/py.typed" in names
+    assert "embed_data_graph/py.typed" in names
     assert any(".dist-info/" in name and Path(name).name.lower().startswith("license") for name in names)
     with open_tar(next(installed["dist"].glob("*.tar.gz"))) as archive:
-        assert any(name.endswith("/src/embed_data_model/py.typed") for name in archive.getnames())
+        assert any(name.endswith("/src/embed_data_graph/py.typed") for name in archive.getnames())
 
 
 def test_installed_package_loads_data_outside_the_checkout(installed):

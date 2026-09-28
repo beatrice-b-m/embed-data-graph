@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from embed_data_model.core.primitives import (
+from embed_data_graph.core.primitives import (
     FovHorizontalFlip,
     FovRotation,
     ImageModality,

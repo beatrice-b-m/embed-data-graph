@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from embed_data_model.sources.embed.magview import normalize_magview_location
-from embed_data_model.core.anatomy import (
+from embed_data_graph.sources.embed.magview import normalize_magview_location
+from embed_data_graph.core.anatomy import (
     AnatomicalLocationCategory,
     DepthThird,
     MedialLateralAxis,
     SuperiorInferiorAxis,
 )
-from embed_data_model.core.primitives import Laterality
+from embed_data_graph.core.primitives import Laterality
 
 
 def warning_codes(result: object) -> set[str]:

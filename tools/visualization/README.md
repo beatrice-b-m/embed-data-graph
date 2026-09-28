@@ -1,7 +1,7 @@
 # Visualization tools
 
 Development scripts that produce figures and pages about the library. They are
-not part of the `embed_data_model` package and are not installed with it.
+not part of the `embed_data_graph` package and are not installed with it.
 
 ## Graph assembly page
 

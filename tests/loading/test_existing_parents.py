@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import DatasetGraph, load_embed
+from embed_data_graph import DatasetGraph, load_embed
 
 
 MAGVIEW = [

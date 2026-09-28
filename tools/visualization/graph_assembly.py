@@ -1,6 +1,6 @@
 """Build the EMBED graph assembly page: one graph, loaded table by table.
 
-Runs ``embed_data_model`` on synthetic rows through four calls: MagView rows
+Runs ``embed_data_graph`` on synthetic rows through four calls: MagView rows
 only, an exam-level partition to the flagged workup, the whole image table and
 then the registry, both with ``parents="existing"``. The graph is recorded after
 each call and rendered as a self-contained, step-through HTML page in the Bea
@@ -27,8 +27,8 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-import embed_data_model
-from embed_data_model import DatasetGraph, load_embed
+import embed_data_graph
+from embed_data_graph import DatasetGraph, load_embed
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -335,7 +335,7 @@ def build_trace(scale_patients: int = 5000) -> Dict[str, Any]:
         "stages": trace_story(),
         "scale": trace_scale(scale_patients) if scale_patients > 0 else None,
         "provenance": {
-            "library": embed_data_model.__version__,
+            "library": embed_data_graph.__version__,
             "commit": git_commit(),
             "python": platform.python_version(),
         },

@@ -1,6 +1,6 @@
 """Pathology from MagView rows attaches to its procedure."""
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 
 def procedure_row(**fields):

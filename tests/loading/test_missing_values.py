@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from embed_data_model import load_embed
+from embed_data_graph import load_embed
 
 MISSING = [None, float("nan"), np.nan, pd.NA, pd.NaT, "", "   "]
 

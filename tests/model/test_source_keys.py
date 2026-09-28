@@ -2,8 +2,8 @@ from datetime import date, datetime
 
 import pandas as pd
 
-from embed_data_model.core.source import SourceRef
-from embed_data_model.core.tables import iter_records
+from embed_data_graph.core.source import SourceRef
+from embed_data_graph.core.tables import iter_records
 
 
 def test_source_keys_are_typed_and_round_trip() -> None:

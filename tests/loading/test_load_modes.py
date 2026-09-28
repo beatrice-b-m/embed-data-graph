@@ -5,8 +5,8 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from embed_data_model import DatasetGraph, Laterality, load_embed
-from embed_data_model.core.anatomy import DepthThird, MedialLateralAxis
+from embed_data_graph import DatasetGraph, Laterality, load_embed
+from embed_data_graph.core.anatomy import DepthThird, MedialLateralAxis
 
 
 def test_partial_magview_load_keeps_patient_and_exam_fields_it_does_not_supply():
@@ -79,7 +79,7 @@ def test_merge_fills_gaps_and_accepts_an_agreeing_value_silently():
 
 
 def test_merge_conflict_on_an_enum_field_becomes_its_unknown_member():
-    from embed_data_model import Laterality
+    from embed_data_graph import Laterality
 
     graph = load_embed(findings=[{"acc_anon": "A1", "numfind": 1, "side": "L", "asses": "B"}]).graph
     report = load_embed(

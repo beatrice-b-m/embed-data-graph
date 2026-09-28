@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import CancerRegistryEntry, DatasetGraph, Exam, MammogramImage, Patient, RegionOfInterest
+from embed_data_graph import CancerRegistryEntry, DatasetGraph, Exam, MammogramImage, Patient, RegionOfInterest
 
 
 @pytest.mark.parametrize("claims", [("P", "Q"), ("Q", "P")])

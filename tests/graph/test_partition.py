@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import (
+from embed_data_graph import (
     DatasetGraph, Exam, Finding, Laterality, Patient, Pathology, Procedure, ProcedureIdentity, load_embed,
 )
 
@@ -93,7 +93,7 @@ def test_partition_keeps_references_its_selected_entities_state():
 
 
 def test_registry_shared_across_exams_copies_with_selected_exam():
-    from embed_data_model import CancerRegistryEntry
+    from embed_data_graph import CancerRegistryEntry
     graph = DatasetGraph()
     a, b = graph.register(Exam("A")), graph.register(Exam("B"))
     entry = graph.register(CancerRegistryEntry("P", "1"))

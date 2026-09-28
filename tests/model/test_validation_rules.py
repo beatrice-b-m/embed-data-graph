@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import ImageModality, MammogramImage, validate
+from embed_data_graph import ImageModality, MammogramImage, validate
 
 
 def issue_codes(entity):

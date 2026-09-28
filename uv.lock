@@ -78,8 +78,8 @@ wheels = [
 ]
 
 [[package]]
-name = "embed-data-model"
-version = "0.2.1"
+name = "embed-data-graph"
+version = "0.3.0"
 source = { editable = "." }
 
 [package.dev-dependencies]

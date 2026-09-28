@@ -1,4 +1,4 @@
-# Contributing to EMBED Data Model
+# Contributing to EMBED Data Graph
 
 This library supplies reusable clinical and imaging objects and EMBED table
 adapters. Downstream repositories own research workflows, outcome definitions,
@@ -13,7 +13,7 @@ From the repository root, with Python 3.9–3.13 and `uv` available:
 ```bash
 uv sync --frozen
 uv run --frozen pytest
-uv run --frozen ruff check src/embed_data_model tests examples benchmarks tools
+uv run --frozen ruff check src/embed_data_graph tests examples benchmarks tools
 uv run --frozen mypy
 uv run --frozen python -m examples.researcher_journeys
 uv run --frozen python -m build
@@ -34,11 +34,11 @@ behavior, and observed behavior.
 
 ## Public API and compatibility
 
-The current version is `0.2.1`. Pin an exact source revision or a qualified wheel
+The current version is `0.3.0`. Pin an exact source revision or a qualified wheel
 and record that dependency in the consumer's lockfile or environment specification.
 The [README](README.md) documents installation from the tagged source release.
 
-Prefer the documented exports from `embed_data_model`. Use documented specialist
+Prefer the documented exports from `embed_data_graph`. Use documented specialist
 modules when a type is not exported at the root. Undocumented implementation
 helpers and private attributes are not supported extension points. Subclassing,
 consumer attributes, and metadata follow the documented object and copy contracts.
@@ -71,7 +71,7 @@ by the behavior they protect:
 - `tests/tools/` checks that the development tools in `tools/` still run
   against the library and still describe its behavior.
 
-EMBED code meanings in `src/embed_data_model/sources/embed/vocabulary.py` are
+EMBED code meanings in `src/embed_data_graph/sources/embed/vocabulary.py` are
 generated from the EMBED clinical-semantic catalog. After the catalog changes,
 regenerate them with `python -m tools.generate_embed_vocabulary --catalog
 <catalog-set.json>` instead of editing the tables by hand.

@@ -2,7 +2,7 @@
 
 import pytest
 
-from embed_data_model import (
+from embed_data_graph import (
     CancerRegistryEntry,
     DatasetGraph,
     Exam,
@@ -14,7 +14,7 @@ from embed_data_model import (
     ProcedureIdentity,
     RegionOfInterest,
 )
-from embed_data_model.clinical.interpretations import ImagingInterpretation
+from embed_data_graph.clinical.interpretations import ImagingInterpretation
 
 
 @pytest.fixture

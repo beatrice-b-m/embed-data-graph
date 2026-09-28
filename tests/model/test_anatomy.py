@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from embed_data_model.core.anatomy import (
+from embed_data_graph.core.anatomy import (
     ClockFacePosition,
     ContinuousAnatomicalPosition,
     DepthThird,
@@ -10,7 +10,7 @@ from embed_data_model.core.anatomy import (
     Quadrant,
     SuperiorInferiorAxis,
 )
-from embed_data_model.core.primitives import Laterality
+from embed_data_graph.core.primitives import Laterality
 
 
 @pytest.mark.parametrize(
@@ -125,7 +125,7 @@ def test_continuous_position_quantizes_to_discrete_quadrant(
 
 
 def test_out_of_range_clock_hour_is_preserved_for_optional_validation():
-    from embed_data_model.core.validation import validate
+    from embed_data_graph.core.validation import validate
     clock = ClockFacePosition(13)
     assert clock.hour == 13
     assert clock.to_quadrant(Laterality.LEFT).ml is MedialLateralAxis.UNKNOWN
