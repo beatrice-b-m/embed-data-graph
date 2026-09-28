@@ -172,6 +172,9 @@ class Procedure(MutableEntity):
 
         return ensure_graph(self).attach(self, pathology)
 
+    def _scope_patient_id(self) -> Optional[str]:
+        return self.identity.patient_id
+
     def _to_dict_data(self) -> Dict[str, Any]:
         return {
             "identity": self.identity,
