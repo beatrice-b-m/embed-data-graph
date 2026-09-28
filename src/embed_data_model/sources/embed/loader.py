@@ -535,6 +535,10 @@ def _load_patients(
     context and merge fills it. The scalar attribute keeps a value only when
     every observation of the patient agrees; otherwise consumers choose one
     with ``Patient.attribute_as_of``.
+
+    A row without the date column addresses the one dated context its
+    accession already has, in the graph or among this call's dated rows, so an
+    undated correction replaces that observation instead of adding another.
     """
 
     converters = {"sex": text, "race": text, "ethnicity": text, "birth_year": _birth_year_value}
@@ -543,12 +547,22 @@ def _load_patients(
         patient = _ensure_patient(graph, key)
         date_column = columns.get("context_date")
         contexts: dict[tuple[Optional[str], Optional[date]], list[_InputRow]] = {}
+        dates: dict[Optional[str], set[Optional[date]]] = {}
+        for item in patient.attribute_observations:
+            dates.setdefault(item.accession_number, set()).add(item.context_date)
+        undated: list[tuple[Optional[str], _InputRow]] = []
         for row in groups[key]:
-            context = (
-                _id_at(row.mapping, columns.get("accession")),
-                _date_value(row.mapping.get(date_column)) if date_column else None,
-            )
-            contexts.setdefault(context, []).append(row)
+            accession = _id_at(row.mapping, columns.get("accession"))
+            if date_column is None or date_column not in row.mapping:
+                undated.append((accession, row))
+                continue
+            context_date = _date_value(row.mapping.get(date_column))
+            dates.setdefault(accession, set()).add(context_date)
+            contexts.setdefault((accession, context_date), []).append(row)
+        for accession, row in undated:
+            known = dates.get(accession, set())
+            context_date = next(iter(known)) if len(known) == 1 else None
+            contexts.setdefault((accession, context_date), []).append(row)
         touched: set[str] = set()
         for (accession, context_date), context_rows in sorted(contexts.items(), key=repr):
             fields, conflicts = _combine_fields(context_rows, columns, converters, "patient", key, issues)
@@ -667,9 +681,12 @@ def _load_findings(
             fields.get("recommendation"),
             _semantic_source(group),
         )
+        existing = graph.get("finding", key)
+        # Anatomy combines side, location, depth and distance; a component the
+        # rows do not supply keeps the finding's stored value.
         anatomy = _finding_anatomy(
-            fields,
-            laterality,
+            _anatomy_inputs(existing, fields, conflicts, mode),
+            _effective_side(existing, fields, conflicts, laterality, mode),
             group,
             source_scope,
             key,
@@ -692,9 +709,9 @@ def _load_findings(
         }
         dependencies = {
             "interpretation": ("assessment", "recommendation"),
-            "anatomical_position": ("location", "depth", "distance"),
-            "normalization_evidence": ("location", "depth", "distance"),
-            "normalization_warnings": ("location", "depth", "distance"),
+            "anatomical_position": ("laterality", "location", "depth", "distance"),
+            "normalization_evidence": ("laterality", "location", "depth", "distance"),
+            "normalization_warnings": ("laterality", "location", "depth", "distance"),
         }
         managed_updates = {}
         for name, value in updates.items():
@@ -704,7 +721,6 @@ def _load_findings(
             if mode == "refresh" or any(conflicts.get(semantic) or fields.get(semantic) is not None for semantic in semantics):
                 managed_updates[name] = value
         updates = managed_updates
-        existing = graph.get("finding", key)
         descriptors = _finding_descriptors(existing, fields, conflicts, mode, key, issues)
         if descriptors is not None:
             updates["descriptors"] = descriptors
@@ -1009,6 +1025,63 @@ def _current(entity: Any, updates: Mapping[str, Any]) -> dict[str, Any]:
     """Return the entity's current values for the fields an update addresses."""
 
     return {name: getattr(entity, name, None) for name in updates}
+
+
+_ANATOMY_CODES = {
+    "location": "source_location_codes",
+    "depth": "source_depth_codes",
+    "distance": "source_distance_codes",
+}
+
+
+def _anatomy_inputs(
+    existing: Any,
+    fields: Mapping[str, Any],
+    conflicts: Mapping[str, bool],
+    mode: str,
+) -> dict[str, Any]:
+    """Return the anatomy codes after this snapshot, filling gaps from the finding.
+
+    A supplied component replaces the stored code (an explicit null clears it
+    in refresh). An absent column, or a null in merge, keeps the stored code.
+    """
+
+    result: dict[str, Any] = {}
+    for name, stored in _ANATOMY_CODES.items():
+        supplied = name in fields and (mode == "refresh" or conflicts.get(name) or fields[name] is not None)
+        if supplied:
+            result[name] = fields[name]
+        elif existing is not None:
+            result[name] = getattr(existing, stored, {}).get(name)
+    return result
+
+
+def _effective_side(
+    existing: Any,
+    fields: Mapping[str, Any],
+    conflicts: Mapping[str, bool],
+    laterality: Laterality,
+    mode: str,
+) -> Laterality:
+    """Return the side the finding has after this snapshot, for anatomy.
+
+    This mirrors how the laterality field itself is refreshed or merged: an
+    absent side column keeps the stored side, and merge turns a contradiction
+    into UNKNOWN.
+    """
+
+    if existing is None:
+        return laterality
+    if "laterality" not in fields:
+        return existing.laterality
+    if mode == "refresh" or conflicts.get("laterality"):
+        return laterality
+    current = existing.laterality
+    if laterality is Laterality.UNKNOWN:
+        return current
+    if current is Laterality.UNKNOWN or current is laterality:
+        return laterality
+    return Laterality.UNKNOWN
 
 
 def _finding_anatomy(
