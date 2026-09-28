@@ -34,9 +34,13 @@ extraction, visualization, and scientific interpretation belong to consumers.
 Clinical identity comes from mapped source identifiers, never DataFrame indexes
 or row order. One accession identifies one exam. Conflicting source patient claims
 remain in `asserted_patient_ids`; ownership stays unset until explicitly assigned
-with `graph.assign_patient`. Explicit ownership persists across reloads. Refresh
-replaces an exam's claims with the claims its snapshot supplies, so a corrected
-source patient ID replaces the earlier one; merge adds claims.
+with `graph.assign_patient`. Explicit ownership persists across reloads. Claims
+are kept per source table: refresh replaces the claims a table supplied before
+with the claims it supplies now, so reloading a corrected table corrects its
+claim, while claims from other tables and claims added outside the loader
+remain. Merge adds claims. The claims an exam asserts therefore do not depend
+on the order in which tables are loaded. An image row whose patient column
+disagrees with its EMBED path claims the column's patient and is reported.
 
 A finding's side is an attribute, not part of its identity. In EMBED a supplied
 null finding side means bilateral (code `B`) and projects to both breast sides;
@@ -68,7 +72,11 @@ issues. Callers assemble complete groups before applying streamed refreshes.
 Default refresh updates existing objects in place and replaces bound
 adapter-managed scalar fields whose columns the rows supply, including explicitly
 null values. A column absent from every row of a grain leaves its field
-unchanged, so partial tables and extracts can be loaded progressively. It preserves Python
+unchanged, so partial tables and extracts can be loaded progressively. This holds
+for composite values too: a finding's anatomical position is derived from the
+supplied side, location, depth and distance plus the stored values of any it
+omits, and a patient-attribute row without the exam-date column addresses the
+dated context its accession already has. It preserves Python
 references, subclasses, consumer attributes and metadata, unbound fields, and
 unsupplied child grains. Child-only loads ensure parent objects without resetting
 their scalar fields. Explicit merge applies non-null values. Complementary rows
@@ -80,6 +88,11 @@ replace the addressed image collection in either load mode, including manual ROI
 Missing or null input preserves the collection; an empty collection clears it;
 malformed or conflicting input preserves it with an issue. Explicit ROI input takes
 precedence over automatic projection. Individual ROI updates preserve the object.
+
+Rows create the patients and exams they address by default. With
+`parents="existing"` a load never adds a patient or exam: rows addressing one
+absent from the target graph at the start of the call are counted and skipped,
+so later tables integrate into a subset without growing it.
 
 Supplied linked-accession and registry-assignment sets replace on refresh and union
 on merge. Absent or unbound columns preserve the sets; explicit null clears them.
@@ -96,15 +109,21 @@ a collision check covering the whole change. Collections are resolved views.
 Source claims remain source facts.
 
 An entity belongs to at most one graph. Registration rejects distinct objects at
-occupied keys. Popping an entity moves it and what it contains into a new graph.
-Exclusive descendants retain Python identity; descendants also contained by
+occupied keys. Popping an entity moves it and what it contains into a new graph;
+a patient also takes the registry entries, procedures and pathology that name it
+in their identity, even when no exam reaches them. Exclusive descendants retain Python identity; descendants also contained by
 something that stays are deep-copied at the boundary. Linked exams are
 associations, not containment; keys crossing the boundary stay unresolved until
 their targets are present.
 
 Selections are live, non-owning views. Partitions are independent graphs of deep
 copies: the selected entities, what they contain, and their ancestors as context.
-Consumer metadata is copied; unsupported copy operations raise an error.
+A selected patient brings its patient-scoped entities as `pop` does. A link that
+only an exam outside the partition records is kept on the copied exam, so it stays
+an unresolved reference rather than disappearing. The context mark records how an
+entity entered the partition; later loads do not change it, and it ends when the
+entity is removed or moved out. Consumer metadata is copied; unsupported copy
+operations raise an error.
 
 ## Validation and evidence
 

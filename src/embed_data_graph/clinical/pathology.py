@@ -230,6 +230,17 @@ class Pathology(MutableEntity):
         self.descriptors = (*self.descriptors, descriptor)
         return descriptor
 
+    def _scope_patient_id(self) -> Optional[str]:
+        # Identity is (patient_id, record_id) or ("procedure", ProcedureIdentity).
+        identity = self.identity
+        if isinstance(identity, tuple) and len(identity) == 2:
+            owner, detail = identity
+            if owner == "procedure":
+                return getattr(detail, "patient_id", None)
+            if isinstance(owner, str):
+                return owner
+        return None
+
     def _to_dict_data(self) -> Dict[str, Any]:
         return {
             "identity": self.identity,
@@ -318,6 +329,9 @@ class CancerRegistryEntry(MutableEntity):
 
         graph = self.graph
         return graph.parents(self, "exam") if graph is not None else ()
+
+    def _scope_patient_id(self) -> Optional[str]:
+        return self.patient_id
 
     def _to_dict_data(self) -> Dict[str, Any]:
         return {

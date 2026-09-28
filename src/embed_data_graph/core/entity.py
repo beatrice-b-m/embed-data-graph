@@ -115,6 +115,16 @@ class MutableEntity:
 
         return {}
 
+    def _scope_patient_id(self) -> Optional[str]:
+        """Patient this entity belongs to by its own identity, when not contained.
+
+        Registry entries, procedures and pathology name their patient in their
+        key, so a patient partition or move carries them even when no exam
+        reaches them. Contained kinds return None.
+        """
+
+        return None
+
     @property
     def graph(self) -> Optional["DatasetGraph"]:
         """The owning DatasetGraph, or None for an entity without relationships."""

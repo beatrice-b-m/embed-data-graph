@@ -2,7 +2,9 @@
 
 import pytest
 
-from embed_data_graph import DatasetGraph, Exam, Finding, Laterality, Patient, Pathology, Procedure, ProcedureIdentity
+from embed_data_graph import (
+    DatasetGraph, Exam, Finding, Laterality, Patient, Pathology, Procedure, ProcedureIdentity, load_embed,
+)
 
 
 def populated():
@@ -100,3 +102,95 @@ def test_registry_shared_across_exams_copies_with_selected_exam():
     output = graph.partition(level="exam", key=lambda obj: obj.accession_number)["A"]
     assert output.exam("B") is None
     assert output.exam("A").registry_entries[0] is not entry
+
+
+def exam_partition():
+    graph, patient, exam, *_ = populated()
+    return graph, graph.partition(level="exam", key=lambda obj: "one" if obj is exam else [])["one"]
+
+
+def test_a_removed_context_entity_is_not_context_when_added_back():
+    _, part = exam_partition()
+    patient = part.patient("P")
+    assert part.is_context(patient)
+
+    part.remove(patient)
+    assert not part.is_context(patient)
+    part.register(patient)
+    assert not part.is_context(patient)
+
+
+def test_context_ends_when_the_entity_moves_out():
+    _, part = exam_partition()
+    patient = part.patient("P")
+
+    part.pop(patient)
+    assert not patient.graph.is_context(patient)
+    assert not part.is_context(patient)
+    part.register(patient)
+    assert not part.is_context(patient)
+
+
+def test_context_is_unchanged_by_later_loads():
+    _, part = exam_partition()
+    patient = part.patient("P")
+
+    load_embed(patients=[{"empi_anon": "P", "GENDER_DESC": "F"}], into=part)
+
+    assert part.patient("P") is patient and patient.sex == "F"
+    assert part.is_context(patient)
+
+
+def test_a_link_recorded_only_outside_the_partition_stays_visible():
+    graph = load_embed(
+        magview=[
+            {"empi_anon": "P1", "acc_anon": "A1", "numfind": 1},
+            {"empi_anon": "P1", "acc_anon": "A2", "numfind": 1, "linkedaccession_anon": "A1"},
+        ]
+    ).graph
+    part = graph.partition(level="exam", key=lambda exam: [exam.accession_number])["A1"]
+
+    assert part.exam("A1").linked_accessions == {"A2"}
+    assert [(item.source_id, item.target_id) for item in part.unresolved_references] == [("A1", "A2")]
+    assert graph.exam("A1").linked_accessions == set()
+
+    load_embed(magview=[{"empi_anon": "P1", "acc_anon": "A2", "numfind": 1}], into=part)
+    assert part.linked_exams(part.exam("A1")) == (part.exam("A2"),)
+
+
+def patient_scoped_graph():
+    return load_embed(
+        magview=[{"empi_anon": "P1", "acc_anon": "A1", "numfind": 1, "cancer_outcome_registry_id": 1}],
+        registry=[{"empi_anon": "P1", "cancer_registry_id": 1}, {"empi_anon": "P1", "cancer_registry_id": 2}],
+        procedures=[{"empi_anon": "P1", "procdate_anon": "2020-01-01", "type": "B", "bside": "L"}],
+    ).graph
+
+
+def test_patient_partition_keeps_entities_that_name_the_patient_without_an_exam():
+    graph = patient_scoped_graph()
+
+    part = graph.partition(level="patient", key=lambda patient: patient.patient_id)["P1"]
+
+    assert {entry.registry_id for entry in part.registry_entries} == {"1", "2"}
+    assert len(part.procedures) == 1
+    assert len(graph.registry_entries) == 2
+
+
+def test_pop_patient_moves_entities_that_name_the_patient():
+    graph = patient_scoped_graph()
+    unassigned = graph.registry_entry("P1", "2")
+
+    patient = graph.pop(graph.patient("P1"))
+
+    assert patient.graph.registry_entry("P1", "2") is unassigned
+    assert len(patient.graph.procedures) == 1
+    assert graph.registry_entries == () and graph.procedures == ()
+
+
+def test_exam_partition_does_not_pull_in_the_patients_unattached_entities():
+    graph = patient_scoped_graph()
+
+    part = graph.partition(level="exam", key=lambda exam: "one")["one"]
+
+    assert [entry.registry_id for entry in part.registry_entries] == ["1"]
+    assert part.procedures == ()

@@ -29,6 +29,54 @@ Changed section gives the migration steps.
   3. Reinstall into existing environments. An editable install of the old
      distribution does not provide the new namespace.
 
+## 0.2.1 — 2026-09-28
+
+Source release `v0.2.1`. This patch release fixes incremental loading and
+partitioning: later tables and partial extracts no longer overwrite patient
+claims, anatomy or dated attributes loaded earlier, and partitions keep the
+records and links that belong to their patients. It adds an opt-in
+`parents="existing"` mode to `load_embed`; the default behavior of documented
+APIs is unchanged apart from the fixes below. Python 3.9–3.13 support and the
+absence of mandatory runtime dependencies are unchanged.
+
+### Added
+
+- `load_embed(..., parents="existing")` loads whole tables into a subset graph
+  without adding patients or exams. A row loads only when every patient and exam
+  it addresses is already in the target graph; skipped rows are counted in one
+  INFO issue per table (`rows_outside_graph`). The default, `parents="create"`,
+  keeps the previous behavior, which registers the patients and exams rows
+  address. Previously, loading a full image table into a partition re-grew it
+  with placeholder exams unless the rows were filtered first.
+
+### Fixed
+
+- Loading images, procedures or pathology after MagView no longer replaces the
+  exam's patient claims. Claims are kept per source table, and refresh replaces
+  only the claims of the table being reloaded. Previously the last table loaded
+  won: an image path naming another patient could re-parent an exam or hide a
+  conflict, and the result depended on load order. `set_patient_claims` still
+  replaces every claim. An image row whose patient column disagrees with its
+  path is reported as `source_patient_path_mismatch`.
+- Partial finding extracts keep the anatomy they do not supply. A row with only
+  distance or location no longer resets the finding's side and depth to
+  unknown, and a side-only correction now moves the anatomical position to the
+  new side instead of leaving it on the old one. MagView side and a narrow
+  location table give the same position in either load order.
+- A patient-attribute correction without the exam-date column replaces the
+  observation for its accession's dated context. Previously it added a second,
+  undated observation and the scalar attribute became unknown.
+- `is_context` no longer reports a newly added object as context when it
+  reuses the Python id of a removed one. Removing or moving an entity ends its
+  context mark; later loads leave the mark unchanged.
+- Patient partitions, `pop` and `register` of a patient now carry registry
+  entries not assigned to an exam and procedures or pathology without an
+  accession. Previously these were dropped from the copy or left behind.
+- A partition keeps a link that only an exam outside it records, as an
+  unresolved reference on the copied exam. Previously the link disappeared.
+- Partitioning no longer scans every unresolved record once per group, which
+  made per-exam partitions quadratic in the number of unresolved records.
+
 ## 0.2.0 — 2026-09-23
 
 Source release `v0.2.0`. This release aligns the model with the EMBED

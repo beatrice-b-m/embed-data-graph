@@ -360,6 +360,9 @@ class DatasetGraph:
     def _add(self, entities: Iterable[MutableEntity]) -> None:
         additions = list(entities)
         self._check_available({id(entity): (entity, {}) for entity in additions})
+        # Context marks are id()s; a newly added object must not inherit the
+        # mark of a departed object whose id it reuses.
+        self._context.difference_update(id(entity) for entity in additions)
         for entity in additions:
             self._index(entity)
 
@@ -390,9 +393,10 @@ class DatasetGraph:
 
         Notes
         -----
-        Moving follows ``pop``: contained entities move with it, and a
-        contained entity that another entity outside the moved set also
-        contains is copied instead of moved.
+        Moving follows ``pop``: contained entities, and for a patient the
+        registry entries, procedures and pathology its identity names, move
+        with it; one that another entity outside the moved set also contains
+        is copied instead of moved.
         """
 
         if entity.graph is self:
@@ -403,19 +407,21 @@ class DatasetGraph:
         if source is None:
             self._add([entity])
             return entity
-        members: Tuple[MutableEntity, ...] = (entity, *source.descendants(entity))
-        self._check_available({id(member): (member, {}) for member in members})
+        members = source._members([entity])
+        self._check_available({marker: (member, {}) for marker, member in members.items()})
         self._add(source._extract(entity))
         return entity
 
     def pop(self, entity: _EntityT) -> _EntityT:
         """Remove an entity and everything it contains into a new graph.
 
-        Contained entities move with it and keep their Python identity. A
-        contained entity that is also contained by something staying here, such
-        as a procedure attached to findings of two exams, stays here and is
-        deep-copied into the new graph. Keys that point back into this graph
-        stay as unresolved references in the new one.
+        Contained entities move with it and keep their Python identity; a
+        patient also takes the registry entries, procedures and pathology that
+        name it, even when no exam reaches them. A contained entity that is
+        also contained by something staying here, such as a procedure attached
+        to findings of two exams, stays here and is deep-copied into the new
+        graph. Keys that point back into this graph stay as unresolved
+        references in the new one.
 
         Returns
         -------
@@ -437,7 +443,7 @@ class DatasetGraph:
     def _extract(self, entity: MutableEntity) -> List[MutableEntity]:
         """Unindex ``entity`` and its exclusive descendants; copy shared ones."""
 
-        members = [entity, *self.descendants(entity)]
+        members = list(self._members([entity]).values())
         member_ids = {id(member) for member in members}
         copied: Set[int] = set()
         for member in members[1:]:
@@ -452,8 +458,44 @@ class DatasetGraph:
         moving = [member for member in members if id(member) not in copied]
         for member in moving:
             self._unindex(member)
+            self._context.discard(id(member))
             object.__setattr__(member, "_graph", None)
         return moving + clones
+
+    def _members(
+        self,
+        roots: Iterable[MutableEntity],
+        scope: Optional[Dict[Hashable, List[MutableEntity]]] = None,
+    ) -> Dict[int, MutableEntity]:
+        """Roots, their descendants and, for patients, patient-scoped entities.
+
+        Returns a mapping of ``id()`` to entity in first-reached order, roots
+        first. ``scope`` is a precomputed ``_patient_scope`` index.
+        """
+
+        members: Dict[int, MutableEntity] = {}
+        for root in roots:
+            for item in (root, *self.descendants(root)):
+                members.setdefault(id(item), item)
+        patients = [item for item in members.values() if item.kind == "patient"]
+        if patients:
+            index = self._patient_scope() if scope is None else scope
+            for patient in patients:
+                for entity in index.get(patient.key, ()):
+                    for item in (entity, *self.descendants(entity)):
+                        members.setdefault(id(item), item)
+        return members
+
+    def _patient_scope(self) -> Dict[Hashable, List[MutableEntity]]:
+        """Entities that name a patient in their own identity, by patient key."""
+
+        index: Dict[Hashable, List[MutableEntity]] = defaultdict(list)
+        for kind in ("registry", "procedure", "pathology"):
+            for entity in self._entities[kind].values():
+                patient_id = entity._scope_patient_id()
+                if patient_id is not None:
+                    index[patient_id].append(entity)
+        return index
 
     def remove(self, entity: MutableEntity) -> None:
         """Drop one entity from the graph without touching what it contains.
@@ -463,6 +505,7 @@ class DatasetGraph:
 
         self._require_member(entity)
         self._unindex(entity)
+        self._context.discard(id(entity))
         object.__setattr__(entity, "_graph", None)
 
     # -- relationships ---------------------------------------------------------
@@ -545,8 +588,9 @@ class DatasetGraph:
     def set_patient_claims(self, exam: Exam, patient_ids: Iterable[str]) -> None:
         """Replace an exam's source patient claims and reconcile its owner.
 
-        Refresh uses this so a corrected source patient ID replaces the earlier
-        claim. Ownership chosen with ``assign_patient`` persists.
+        This replaces every claim, whichever table supplied it; ``load_embed``
+        refresh replaces only the claims of the tables it loads. Ownership
+        chosen with ``assign_patient`` persists.
         """
 
         self._require_member(exam)
@@ -774,9 +818,13 @@ class DatasetGraph:
         dict of hashable to DatasetGraph
             One graph per group, in first-seen order. Each holds deep copies of
             the grouped entities, everything they contain, and their ancestors
-            as context (``graph.is_context(entity)`` is True for those). Copies
-            keep their stored keys, so a relationship to an entity outside the
-            group remains an unresolved reference.
+            as context (``graph.is_context(entity)`` is True for those). A
+            grouped patient also brings the registry entries, procedures and
+            pathology that name it, even when no exam reaches them. Copies keep
+            their stored keys, so a relationship to an entity outside the group
+            remains an unresolved reference; a link that only an exam outside
+            the group records is added to the copied exam's
+            ``linked_accessions`` so it stays visible the same way.
 
         Raises
         ------
@@ -793,13 +841,28 @@ class DatasetGraph:
             result = key(obj)
             for group in result if isinstance(result, (list, set, frozenset)) else (result,):
                 groups.setdefault(group, []).append(obj)
-        return {group: self._copy(selected) for group, selected in groups.items()}
+        scope = self._patient_scope() if level == "patient" else None
+        records = self._record_index()
+        return {group: self._copy(selected, scope, records) for group, selected in groups.items()}
 
-    def _copy(self, selected: List[MutableEntity]) -> DatasetGraph:
-        members: Dict[int, MutableEntity] = {}
-        for obj in selected:
-            for item in (obj, *self.descendants(obj)):
-                members.setdefault(id(item), item)
+    def _record_index(self) -> Dict[Any, List[Tuple[int, Any]]]:
+        """Unresolved-record addresses by each entity address they name."""
+
+        index: Dict[Any, List[Tuple[int, Any]]] = defaultdict(list)
+        for position, address in enumerate(self.unresolved_records):
+            if isinstance(address, tuple):
+                for part in address:
+                    if isinstance(part, tuple):
+                        index[part].append((position, address))
+        return index
+
+    def _copy(
+        self,
+        selected: List[MutableEntity],
+        scope: Optional[Dict[Hashable, List[MutableEntity]]] = None,
+        records: Optional[Dict[Any, List[Tuple[int, Any]]]] = None,
+    ) -> DatasetGraph:
+        members = self._members(selected, scope)
         context: Dict[int, MutableEntity] = {}
         for obj in selected:
             for item in self.ancestors(obj):
@@ -810,17 +873,39 @@ class DatasetGraph:
             copies = {marker: deepcopy(item, memo) for marker, item in {**members, **context}.items()}
         except Exception as exc:
             raise ValueError("Consumer state cannot be independently copied; provide a __deepcopy__ hook") from exc
+        for marker, item in {**members, **context}.items():
+            if item.kind == "exam":
+                # Links read symmetrically; keep one recorded only outside the copy.
+                inbound = {
+                    referrer.key
+                    for referrer in self._referring(item, "association", "linked_accessions")
+                    if id(referrer) not in members and id(referrer) not in context
+                }
+                if inbound:
+                    copy = copies[marker]
+                    copy.update(linked_accessions={*getattr(copy, "linked_accessions"), *inbound})
         output = DatasetGraph(source_scope=self.source_scope)
         output._add(copies.values())
         output._context = {id(copies[marker]) for marker in context}
-        addresses = {(item.kind, item.key) for item in (*members.values(), *context.values())}
-        for address, payload in self.unresolved_records.items():
-            if isinstance(address, tuple) and any(part in addresses for part in address if isinstance(part, tuple)):
-                output.unresolved_records[deepcopy(address)] = deepcopy(payload)
+        index = self._record_index() if records is None else records
+        matched = {
+            entry
+            for item in (*members.values(), *context.values())
+            for entry in index.get((item.kind, item.key), ())
+        }
+        for _, address in sorted(matched, key=lambda entry: entry[0]):
+            output.unresolved_records[deepcopy(address)] = deepcopy(self.unresolved_records[address])
         return output
 
     def is_context(self, entity: MutableEntity) -> bool:
-        """True when ``entity`` was copied into this partition only as an ancestor."""
+        """True when ``entity`` was copied into this partition only as an ancestor.
+
+        The mark records how the entity entered the partition: the partition
+        holds it but not necessarily everything it contains in the source
+        graph. Later loads into the partition do not change it. It ends when
+        the entity is removed or moved out, and an entity added later is never
+        context.
+        """
 
         return id(entity) in self._context
 

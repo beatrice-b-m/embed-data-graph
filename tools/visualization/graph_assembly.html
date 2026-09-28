@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EMBED Graph Assembly</title>
+<!-- Template for tools/visualization/graph_assembly.py; the build inlines the Bea assets and the trace. -->
+<style>/*__BEA_TOKENS__*/</style>
+<style>/*__BEA_CSS__*/</style>
+<style>
+/* Page layout on Bea tokens. Components never branch on the theme; tokens carry light and dark. */
+body { font-size: 14px; line-height: 20px; }
+.page { max-width: 1320px; margin: 0 auto; padding: var(--space-10) var(--space-12); display: flex; flex-direction: column; gap: var(--space-12); }
+@media (max-width: 720px) { .page { padding: var(--space-6) var(--space-4); } }
+.head { display: flex; flex-direction: column; gap: var(--space-2); max-width: 76ch; }
+.crumb { font-family: var(--font-mono); font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+.head h1 { margin: 0; }
+.head p { margin: 0; }
+code, .code { font-family: var(--font-mono); font-size: 13px; }
+
+.controls { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 3; display: flex; gap: var(--space-2); align-items: center; padding-block: var(--space-3); background: var(--canvas); }
+.controls .bea-seg { flex: 1 1 auto; }
+.controls .bea-seg-opt { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; }
+.controls .bea-seg-opt .n { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: var(--space-6); align-items: start; }
+@media (max-width: 1180px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.bea-card { min-width: 0; }
+.figure-box { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--fig-ground); }
+.figure-box svg { display: block; width: 100%; min-width: 720px; height: auto; }
+figure { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+figcaption { color: var(--ink-muted); max-width: 84ch; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.block { display: flex; flex-direction: column; gap: var(--space-2); }
+.block-label { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--ink-muted); }
+pre.code { margin: 0; padding: var(--space-3); font-size: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); overflow-x: auto; line-height: 20px; color: var(--text); }
+pre.code b { font-weight: 700; }
+.bea-row .what { font-size: 14px; line-height: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-mono); font-size: 12px; line-height: 16px; padding: 3px 7px; border-radius: var(--radius-sm); border: 1px dashed var(--line); color: var(--ink-muted); }
+.chip.on { border: 1px solid var(--ink); color: var(--text); background: var(--paper); }
+.chip.fresh { border-width: 2px; padding: 2px 6px; }
+.kv { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.kv td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.kv td:first-child { font-weight: 700; }
+.kv td.v { text-align: right; font-family: var(--font-mono); font-size: 13px; }
+.kv td.d { text-align: right; width: 44px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+
+.cards { display: flex; flex-direction: column; gap: var(--space-6); }
+.ids-box { overflow-x: auto; }
+.ids { width: 100%; min-width: 720px; border-collapse: collapse; }
+.ids th, .ids td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.ids th { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--ink-muted); }
+.ids td.addr { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ids td.addr > span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.ids tr.cur td { background: var(--row-hover); }
+.ids tr.cur td:first-child { font-weight: 700; }
+
+.bar { display: flex; height: 20px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--ink); }
+.bar .attached { background: var(--green-tint); border-right: 1px solid var(--status-positive); }
+.bar .outside { flex: 1; background: var(--surface); }
+.bar-labels { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-4); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.bar-labels span { display: inline-flex; align-items: center; gap: 6px; }
+.bar-labels .out { color: var(--ink-muted); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
+.tiles .bea-tile-value span { font-variant-numeric: tabular-nums; }
+.tiles .note { font-size: 12px; line-height: 16px; color: var(--ink-muted); text-align: center; }
+footer { font-size: 12px; line-height: 16px; color: var(--ink-muted); max-width: 100ch; }
+
+/* The figure: flat, ink outlines, colour only for status (partial, unknown). */
+.fig text { font-family: var(--font-sans); font-size: 13.33px; fill: var(--text); }
+.fig .m { font-family: var(--font-mono); font-size: 12px; }
+.fig .c { font-size: 10.67px; }
+.fig .muted { fill: var(--ink-muted); }
+.fig .colhead { font-size: 10.67px; font-weight: 600; fill: var(--ink-muted); }
+.fig .lane { stroke: var(--line); stroke-width: 1px; }
+.fig .box { fill: var(--fig-node); stroke: var(--ink); stroke-width: var(--fig-stroke); transition: stroke-width var(--quick) var(--ease-standard); }
+.fig .n, .fig .e, .fig .u, .fig .ann { transition: opacity var(--reveal) var(--ease-standard); }
+.fig .off { opacity: 0; pointer-events: none; }
+.fig .ghost { opacity: 0.2; }
+.fig .n.new .box { stroke-width: var(--fig-stroke-strong); }
+.fig .n.ctx .box { fill: var(--orange-tint); stroke: var(--status-partial); }
+.fig .n .ctxmark { display: none; }
+.fig .n.ctx .ctxmark { display: inline; }
+.fig .e path { fill: none; stroke: var(--ink); stroke-width: var(--fig-stroke); }
+.fig .e.link path { stroke: var(--muted); stroke-width: var(--fig-stroke-subtle); }
+.fig .u path { fill: none; stroke: var(--muted); stroke-width: var(--fig-stroke); stroke-dasharray: 5 4; }
+.fig .slot rect { fill: var(--fig-node); stroke: var(--status-unknown); stroke-width: var(--fig-stroke); stroke-dasharray: 5 4; }
+.fig .icon { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.fig .roi rect { fill: none; stroke: var(--ink); stroke-width: var(--fig-stroke); }
+.fig .roi.new rect { stroke-width: var(--fig-stroke-strong); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="head bea-enter">
+    <div class="crumb">embed-data-graph / tools / visualization</div>
+    <h1 class="bea-type-heading">EMBED graph assembly</h1>
+    <p>A synthetic run through <code>embed_data_graph</code>. Clinical rows load first, then the graph is cut down to the exams flagged for workup. The whole image table and then the registry are loaded later into that subset. Every node was read back from the library's objects after each call.</p>
+  </header>
+
+  <div class="controls bea-enter" style="animation-delay: 40ms">
+    <div class="bea-seg" role="group" aria-label="Loading step" id="steps"><div class="bea-knob"></div></div>
+    <button type="button" class="bea-btn bea-btn-secondary bea-btn-icon" id="prev" aria-label="Previous step"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="stroke: var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
+    <button type="button" class="bea-btn bea-btn-secondary bea-btn-icon" id="next" aria-label="Next step"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="stroke: var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
+  </div>
+
+  <div class="stage">
+    <section class="bea-card bea-enter" style="animation-delay: 80ms">
+      <h2 class="bea-card-title" id="fig-title"></h2>
+      <figure>
+        <div class="figure-box"><svg class="fig" id="graph" role="img" aria-label="Patient lanes showing the exams, findings, procedures, pathology, images and registry entries in the graph at the selected step"></svg></div>
+        <div class="legend" id="legend"></div>
+        <figcaption id="caption"></figcaption>
+      </figure>
+    </section>
+    <aside class="bea-card bea-enter" style="animation-delay: 140ms" aria-live="polite">
+      <h2 class="bea-card-title" id="s-title"></h2>
+      <div class="block"><div class="block-label">The call</div><pre class="code" id="s-code"></pre></div>
+      <div class="block"><div class="block-label">What changed</div><div class="bea-stack" id="s-changes"></div></div>
+      <div class="block"><div class="block-label">Tables loaded into this graph</div><div class="chips" id="s-tables"></div></div>
+      <div class="block"><div class="block-label">Entities</div><table class="kv" id="s-counts"></table></div>
+    </aside>
+  </div>
+
+  <div class="cards">
+    <section class="bea-card bea-enter" style="animation-delay: 200ms">
+      <h2 class="bea-card-title">The same objects, all the way through</h2>
+      <p style="margin: 0; max-width: 80ch">After the partition, later loads update the subset's objects in place instead of replacing them. These are the Python <code>id()</code> values of three tracked objects after each step. The partition itself makes independent copies, so the step 1 object belongs to the source graph.</p>
+      <div class="ids-box"><table class="ids" id="ids"></table></div>
+    </section>
+
+    <section class="bea-card bea-enter" style="animation-delay: 260ms" id="scale-card">
+      <h2 class="bea-card-title">The same call at scale</h2>
+      <p style="margin: 0; max-width: 80ch" id="scale-lede"></p>
+      <div class="block"><div class="bar" id="scale-bar" role="img"></div><div class="bar-labels" id="scale-labels"></div></div>
+      <div class="tiles" id="scale-tiles"></div>
+    </section>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script type="application/json" id="trace">__TRACE_JSON__</script>
+<script>/*__BEA_JS__*/</script>
+<script>
+(function () {
+const D = JSON.parse(document.getElementById('trace').textContent);
+const S = D.stages;
+const NS = 'http://www.w3.org/2000/svg';
+const TABLES = ['patients', 'exams', 'findings', 'images', 'rois', 'hormone_history', 'procedure_history', 'procedures', 'pathology', 'magview', 'registry'];
+const KINDS = [['patient', 'Patients'], ['exam', 'Exams'], ['finding', 'Findings'], ['procedure', 'Procedures'], ['pathology', 'Pathology'], ['registry', 'Registry entries'], ['image', 'Images'], ['roi', 'ROIs']];
+const fmt = n => n.toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+// Status icons: 16-unit line drawings, stroke 1.6 (Bea iconography).
+const ICON = {
+  positive: '<path d="M3 8.5l3 3 7-7"/>',
+  negative: '<path d="M5 5l6 6M11 5l-6 6"/>',
+  partial: '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" style="fill: var(--status-partial)"/>',
+  unknown: '<circle cx="8" cy="8" r="5.5" stroke-dasharray="2 1.6"/><path d="M6.4 6.4a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.5-.7 1v.4"/><path d="M8 11.2v.1"/>',
+};
+const icon = (status, size) => `<svg width="${size || 14}" height="${size || 14}" viewBox="0 0 16 16" fill="none" style="stroke: var(--status-${status})" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[status]}</svg>`;
+const badge = (status, word) => `<span class="bea-badge bea-badge--${status}">${icon(status)}<span>${word}</span></span>`;
+
+const STEP = [
+  {short: 'Clinical', title: 'Load clinical rows only', code: 'report = load_embed(magview=magview_rows)\nclinical = report.graph'},
+  {short: 'Subset', title: 'Flag exams, keep the workup', code:
+`FLAGGED = {"S", "M"}
+
+def flagged(f):
+    i = f.interpretation
+    a = i.assessment if i else None
+    return a is not None and a.code in FLAGGED
+
+for e in clinical.exams:
+    hits = any(map(flagged, e.findings))
+    e.review_flag = "workup" if hits else None
+
+workup = clinical.partition(
+    level="exam",
+    key=lambda e: e.review_flag or [],
+)["workup"]`},
+  {short: 'Images', title: 'Load the whole image table', code: '# every image row in the extract, unfiltered\nreport = load_embed(\n    images=image_rows,\n    into=workup,\n    <b>parents="existing"</b>,\n)'},
+  {short: 'Registry', title: 'Load the registry later still', code: 'report = load_embed(\n    registry=registry_rows,\n    into=workup,\n    <b>parents="existing"</b>,\n)'},
+];
+
+// ---------- union model: every entity that appears at any step, so positions stay fixed
+const union = new Map();
+S.forEach(s => s.nodes.forEach(n => { if (!union.has(n.id)) union.set(n.id, n); }));
+const uEdges = new Map();
+S.forEach(s => s.edges.forEach(e => uEdges.set(e.from + '>' + e.to, e)));
+const kids = (id, kind) => [...uEdges.values()].filter(e => e.from === id && e.type === 'contains' && e.to.startsWith(kind + ':')).map(e => e.to);
+const byKind = k => [...union.values()].filter(n => n.kind === k);
+const regTargets = new Map();
+const addTarget = (exam, reg) => regTargets.set(exam, new Set([...(regTargets.get(exam) || []), reg]));
+S.forEach(s => {
+  s.edges.filter(e => e.to.startsWith('registry:')).forEach(e => addTarget(e.from, e.to));
+  s.unresolved.filter(u => u.target_kind === 'registry').forEach(u => addTarget(u.from, u.to));
+});
+const links = new Map();
+S.forEach(s => {
+  s.edges.filter(e => e.type === 'linked').forEach(e => links.set([e.from, e.to].sort().join('~'), [e.from, e.to]));
+  s.unresolved.filter(u => u.target_kind === 'exam').forEach(u => links.set([u.from, u.to].sort().join('~'), [u.from, u.to]));
+});
+
+// ---------- layout: one lane per patient, columns by kind, rows share centerlines
+const X = {pat: 16, patW: 64, spine: 98, link: 118, exam: 134, examW: 204, fspine: 360, find: 384, findW: 120, proc: 540, procW: 120, path: 696, pathW: 88};
+const TILE = {w: 42, h: 32, gap: 4, x: 12, y: 26};
+const VIEWS = ['L CC', 'L MLO', 'R CC', 'R MLO'];
+const ROW = 36, HEAD = 11;  // row pitch; header centerline offset inside an exam card
+const pos = new Map();
+const lanes = [];
+let y = 34;
+byKind('patient').forEach(p => {
+  const top = y;
+  y += 12;
+  byKind('exam').filter(e => e.patient === p.id.slice(8)).forEach(ex => {
+    const regs = [...(regTargets.get(ex.id) || [])];
+    const cardH = 66 + regs.length * 27;
+    const finds = kids(ex.id, 'finding');
+    pos.set(ex.id, {x: X.exam, y, w: X.examW, h: cardH});
+    finds.forEach((f, i) => {
+      const fy = y + HEAD - 14 + i * ROW;
+      pos.set(f, {x: X.find, y: fy, w: X.findW, h: 28});
+      kids(f, 'procedure').forEach(pr => {
+        pos.set(pr, {x: X.proc, y: fy, w: X.procW, h: 28});
+        kids(pr, 'pathology').forEach(pa => pos.set(pa, {x: X.path, y: fy, w: X.pathW, h: 28}));
+      });
+    });
+    regs.forEach((r, i) => pos.set(r, {x: X.exam + 8, y: y + 64 + i * 27, w: X.examW - 16, h: 22}));
+    y += Math.max(cardH, finds.length * ROW - 8) + 16;
+  });
+  const first = byKind('exam').find(e => e.patient === p.id.slice(8));
+  pos.set(p.id, {x: X.pat, y: (first ? pos.get(first.id).y + HEAD : top + 26) - 14, w: X.patW, h: 28});
+  lanes.push(top);
+  y += 8;
+});
+const W = 800, H = y + 4;
+const centre = id => id.startsWith('exam:') ? pos.get(id).y + HEAD : pos.get(id).y + 14;
+
+// ---------- drawing helpers
+const svg = document.getElementById('graph');
+svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; };
+const txt = (s, attrs, parent) => { const t = el('text', attrs, parent); t.textContent = s; return t; };
+const defs = el('defs', {});
+[['ink', 'var(--ink)'], ['muted', 'var(--muted)']].forEach(([id, fill]) => {
+  const m = el('marker', {id: 'a-' + id, viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse', orient: 'auto'}, defs);
+  el('path', {d: 'M0 0L8 4L0 8z', style: `fill: ${fill}`}, m);
+});
+const figIcon = (status, x, yy, parent) => {
+  const g = el('g', {class: 'icon', transform: `translate(${x} ${yy}) scale(0.875)`, style: `stroke: var(--status-${status})`}, parent);
+  g.innerHTML = ICON[status];
+  return g;
+};
+
+el('rect', {x: 0, y: 0, width: W, height: H, style: 'fill: var(--fig-ground)'});
+[['Patient', X.pat], ['Exam and images', X.exam], ['Finding', X.find], ['Procedure', X.proc], ['Pathology', X.path]].forEach(([s, x]) => txt(s, {x, y: 20, class: 'colhead'}));
+lanes.forEach((top, i) => { if (i) el('line', {x1: 8, x2: W - 8, y1: top - 4, y2: top - 4, class: 'lane'}); });
+
+const gEdges = el('g', {}), gNodes = el('g', {});
+const nodeEls = new Map(), edgeEls = new Map(), dangleEls = [], annEls = new Map();
+
+// Containment: orthogonal trunk and branch; the first child continues the parent's centerline.
+uEdges.forEach((e, k) => {
+  if (e.type !== 'contains') return;
+  const fk = e.from.split(':')[0], tk = e.to.split(':')[0];
+  if (tk === 'image' || tk === 'roi' || tk === 'registry') return;  // drawn inside the exam card
+  const a = pos.get(e.from), b = pos.get(e.to), y1 = centre(e.from), y2 = centre(e.to);
+  let d;
+  if (fk === 'patient') d = `M${a.x + a.w},${y1} H${X.spine} V${y2} H${b.x - 2}`;
+  else if (fk === 'exam') d = `M${a.x + a.w},${y1} H${X.fspine} V${y2} H${b.x - 2}`;
+  else d = `M${a.x + a.w},${y1} H${b.x - 2}`;
+  const g = el('g', {class: 'e off'}, gEdges);
+  el('path', {d, 'marker-end': 'url(#a-ink)'}, g);
+  edgeEls.set(k, g);
+});
+// Same-episode links: a thin bracket left of the exam cards; dashed while its target is absent.
+links.forEach(([a, b], k) => {
+  const y1 = centre(a), y2 = centre(b), x = X.exam;
+  const d = `M${x},${y1} H${X.link} V${y2} H${x - 2}`;
+  const g = el('g', {class: 'e link off'}, gEdges); el('path', {d, 'marker-end': 'url(#a-muted)'}, g); edgeEls.set('link:' + k, g);
+  const u = el('g', {class: 'u off'}, gEdges); el('path', {d, 'marker-end': 'url(#a-muted)'}, u); dangleEls.push({el: u, from: a, to: b});
+});
+
+function nodeGroup(id, cls) { const g = el('g', {class: 'n off ' + (cls || ''), 'data-id': id}, gNodes); el('title', {}, g); nodeEls.set(id, g); return g; }
+const box = (g, p) => el('rect', {x: p.x, y: p.y, width: p.w, height: p.h, rx: 4, class: 'box'}, g);
+function annotation(id, x, yy) { const t = txt('not in subset', {x, y: yy, class: 'c muted ann off'}, gNodes); annEls.set(id, t); }
+
+byKind('patient').forEach(n => {
+  const p = pos.get(n.id), g = nodeGroup(n.id);
+  box(g, p);
+  txt(n.label, {x: p.x + 10, y: p.y + 18, class: 'm'}, g);
+  const mark = el('g', {class: 'ctxmark'}, g);
+  figIcon('partial', p.x + p.w - 20, p.y + 7, mark);
+  txt('context', {x: p.x, y: p.y + p.h + 14, class: 'c muted'}, mark);
+  annotation(n.id, p.x, p.y + p.h + 14);
+});
+byKind('exam').forEach(n => {
+  const p = pos.get(n.id), g = nodeGroup(n.id);
+  box(g, p);
+  txt(n.label, {x: p.x + 12, y: p.y + 16, class: 'm', 'font-weight': '700'}, g);
+  txt(`${n.description} · ${n.date}`, {x: p.x + 58, y: p.y + 16, class: 'c muted'}, g);
+  annotation(n.id, p.x + 12, p.y + 46);
+});
+byKind('image').forEach(n => {
+  const ex = pos.get('exam:' + n.exam), i = VIEWS.indexOf(n.label);
+  const p = {x: ex.x + TILE.x + i * (TILE.w + TILE.gap), y: ex.y + TILE.y, w: TILE.w, h: TILE.h};
+  pos.set(n.id, p);
+  const g = nodeGroup(n.id, 'tile');
+  box(g, p);
+  txt(n.label, {x: p.x + p.w / 2, y: p.y + p.h - 6, 'text-anchor': 'middle', class: 'm', style: 'font-size: 10.67px'}, g);
+});
+byKind('roi').forEach(n => {
+  const img = [...uEdges.values()].find(e => e.to === n.id).from, t = pos.get(img);
+  const g = nodeGroup(n.id, 'roi');
+  el('rect', {x: t.x + t.w / 2 - 5, y: t.y + 4, width: 10, height: 8, rx: 1}, g);
+});
+byKind('finding').forEach(n => { const p = pos.get(n.id), g = nodeGroup(n.id); box(g, p); txt(n.label, {x: p.x + 12, y: p.y + 18, class: 'm'}, g); });
+byKind('procedure').forEach(n => {
+  const p = pos.get(n.id), g = nodeGroup(n.id); box(g, p);
+  txt('needle biopsy', {x: p.x + 12, y: p.y + 12, class: 'c muted'}, g);
+  txt(n.date, {x: p.x + 12, y: p.y + 24, class: 'm', style: 'font-size: 10.67px'}, g);
+});
+byKind('pathology').forEach(n => { const p = pos.get(n.id), g = nodeGroup(n.id); box(g, p); txt('pathology', {x: p.x + 12, y: p.y + 18}, g); });
+// Registry: an entity when present; a dashed "unknown" slot while only the key is stored.
+const slotEls = new Map();
+pos.forEach((p, id) => {
+  if (!id.startsWith('registry:')) return;
+  const entry = id.split('/').pop();
+  const g = nodeGroup(id); box(g, p);
+  txt(`registry entry ${entry}`, {x: p.x + 10, y: p.y + 15, class: 'm', style: 'font-size: 10.67px'}, g);
+  const s = el('g', {class: 'u slot off'}, gNodes);
+  el('rect', {x: p.x, y: p.y, width: p.w, height: p.h, rx: 4}, s);
+  figIcon('unknown', p.x + 6, p.y + 4, s);
+  txt(`registry ${entry} · key only`, {x: p.x + 26, y: p.y + 15, class: 'm', style: 'font-size: 10.67px'}, s);
+  slotEls.set(id, s);
+});
+
+// ---------- legend (the encodings repeat across many nodes)
+const swatch = inner => `<svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true">${inner}</svg>`;
+const R = 'x="1" y="2" width="24" height="12" rx="3"';
+document.getElementById('legend').innerHTML = [
+  [swatch(`<rect ${R} style="fill: var(--fig-node); stroke: var(--ink); stroke-width: 1.2px"/>`), 'In this graph'],
+  [swatch(`<rect ${R} style="fill: var(--fig-node); stroke: var(--ink); stroke-width: 2.4px"/>`), 'Arrived this step'],
+  [swatch(`<rect ${R} style="fill: var(--orange-tint); stroke: var(--status-partial); stroke-width: 1.2px"/>`) + icon('partial'), 'Context: ancestor copied into the subset'],
+  [swatch(`<rect ${R} style="fill: var(--fig-node); stroke: var(--ink); stroke-width: 1.2px; opacity: 0.2"/>`), 'Not in subset: left in the source graph'],
+  [swatch(`<rect ${R} style="fill: var(--fig-node); stroke: var(--status-unknown); stroke-width: 1.2px; stroke-dasharray: 5 4"/>`) + icon('unknown'), 'Key only: target not loaded'],
+  [swatch(`<rect ${R} style="fill: var(--fig-node); stroke: var(--ink); stroke-width: 1.2px"/><rect x="15" y="4" width="7" height="5" rx="1" style="fill: none; stroke: var(--ink); stroke-width: 1.2px"/>`), 'Image view, with an ROI box'],
+].map(([mark, words]) => `<span>${mark}${words}</span>`).join('');
+
+// ---------- per-step state
+const present = S.map(s => new Set(s.nodes.map(n => n.id)));
+const edgeSet = S.map(s => new Set(s.edges.map(e => e.from + '>' + e.to)));
+const linkSet = S.map(s => new Set(s.edges.filter(e => e.type === 'linked').map(e => [e.from, e.to].sort().join('~'))));
+const everClinical = present[0];
+const setState = (g, base, state) => g.setAttribute('class', `${base} ${state}`.trim());
+
+function drawStep(i) {
+  const cur = present[i], prev = i > 0 ? present[i - 1] : new Set(), s = S[i];
+  const ctx = new Set(s.nodes.filter(n => n.context).map(n => n.id));
+  const py = new Map(s.nodes.map(n => [n.id, n.py]));
+  nodeEls.forEach((g, id) => {
+    const n = union.get(id), base = g.getAttribute('class').replace(/\b(off|on|ghost|new|ctx)\b/g, '').trim();
+    let state = 'off';
+    if (cur.has(id)) state = 'on' + (i > 1 && !prev.has(id) ? ' new' : '') + (ctx.has(id) ? ' ctx' : '');
+    else if (i > 0 && everClinical.has(id)) state = 'ghost';
+    setState(g, base, state);
+    const name = `${n.kind} ${id.slice(n.kind.length + 1)}`;
+    g.querySelector('title').textContent = cur.has(id)
+      ? `${name}\nPython object ${py.get(id)}${ctx.has(id) ? '\nContext: copied as an ancestor' : ''}`
+      : `${name}\nNot in this graph`;
+  });
+  annEls.forEach((t, id) => setState(t, 'c muted ann', i > 0 && everClinical.has(id) && !cur.has(id) ? 'on' : 'off'));
+  edgeEls.forEach((g, k) => {
+    const base = g.getAttribute('class').replace(/\b(off|on|ghost)\b/g, '').trim();
+    let state = 'off';
+    if (k.startsWith('link:')) state = linkSet[i].has(k.slice(5)) ? 'on' : 'off';
+    else if (edgeSet[i].has(k)) state = 'on';
+    else if (i > 0 && edgeSet[0].has(k)) state = 'ghost';
+    setState(g, base, state);
+  });
+  dangleEls.forEach(d => setState(d.el, 'u', s.unresolved.some(u => u.from === d.from && u.to === d.to) ? 'on' : 'off'));
+  slotEls.forEach((g, id) => setState(g, 'u slot', s.unresolved.some(u => u.to === id) ? 'on' : 'off'));
+}
+
+// ---------- side panel
+const outside = s => s.issues.filter(x => x.code === 'rows_outside_graph');
+const noun = {images: 'image', rois: 'ROI'};
+function changes(i) {
+  const s = S[i], p = S[i - 1], c = s.counts, rows = [];
+  const add = (status, word, html) => rows.push(`<div class="bea-row"><span class="what">${html}</span>${badge(status, word)}</div>`);
+  if (i === 0) {
+    add('positive', 'Added', `${fmt(s.rows.magview)} wide MagView rows became ${c.patient} patients, ${c.exam} exams, ${c.finding} findings, ${c.procedure} procedures and ${c.pathology} pathology bundles.`);
+    add('unknown', 'Key only', `${s.unresolved.length} registry assignments are stored as keys. The registry table isn't loaded, so they wait and no error is raised.`);
+    add('positive', 'Enough', 'Loaded 1 of the 11 supported tables. No other table was required.');
+  } else if (i === 1) {
+    add('positive', 'Copied', `${c.exam} flagged exams were copied into an independent graph with their ${c.finding} findings, ${c.procedure} procedures and ${c.pathology} pathology bundles.`);
+    add('partial', 'Context', `Their ${c.patient} patients came along as context ancestors: <code>workup.is_context(patient)</code> is True.`);
+    s.unresolved.filter(u => u.target_kind === 'exam').slice(0, 1).forEach(u => add('unknown', 'Key only', `${esc(u.from.slice(5))}'s link to ${esc(u.to.slice(5))} crossed the subset boundary. It stays as an unresolved key instead of pulling ${esc(u.to.slice(5))} in.`));
+    add('negative', 'Not in subset', `${p.counts.exam - c.exam} unflagged exams stay in the source graph, which is unchanged.`);
+  } else {
+    KINDS.forEach(([k, name]) => { const d = c[k] - p.counts[k]; if (d > 0) add('positive', 'Added', `+${d} ${k === 'roi' ? 'ROIs' : name.toLowerCase()} attached to entities already in the subset.`); });
+    const resolved = p.unresolved.filter(u => !s.unresolved.some(v => v.from === u.from && v.to === u.to));
+    if (resolved.length) add('positive', 'Resolved', `${resolved.length} waiting registry keys resolved on arrival: ${resolved.map(u => esc(u.from.slice(5))).join(' and ')} now reach their entries.`);
+    outside(s).forEach(x => add('negative', 'Skipped', `${x.context.rows} of ${fmt(s.rows[x.context.table])} ${noun[x.context.table] || x.context.table} rows address patients or exams outside the subset. They are counted in one <code>rows_outside_graph</code> info issue and not loaded.`));
+    add('positive', 'Same objects', `Patients ${p.counts.patient} → ${c.patient}, exams ${p.counts.exam} → ${c.exam}. Every tracked object is the same Python object as before.`);
+  }
+  return rows.join('');
+}
+function counts(i) {
+  const c = S[i].counts, p = i ? S[i - 1].counts : null;
+  return KINDS.map(([k, name]) => {
+    const d = p ? c[k] - p[k] : c[k];
+    return `<tr><td>${name}</td><td class="v">${c[k]}</td><td class="d">${d === 0 ? '' : (d > 0 ? '+' + d : String(d))}</td></tr>`;
+  }).join('');
+}
+function tables(i) {
+  const s = S[i], prev = i ? new Set(S[i - 1].tables) : new Set();
+  return TABLES.map(t => {
+    const on = s.tables.includes(t), fresh = on && !prev.has(t) && i !== 1;
+    return `<span class="chip ${on ? 'on' : ''} ${fresh ? 'fresh' : ''}" title="${on ? 'Loaded' : 'Not loaded'}">${t}</span>`;
+  }).join('');
+}
+const CAPTIONS = [
+  'Each lane is one patient. An exam card holds its four views (left and right, CC and MLO), which stay empty because no image table has been loaded. Dashed slots are registry keys the rows supplied before their entries exist.',
+  'The partition holds only the three flagged exams and what they contain. Their patients are copied as context, and faded nodes remain only in the source graph. The A302 → A301 link is now a key whose target is outside this graph.',
+  'The whole image table, 36 rows for all nine exams, was loaded into the subset. Only the 12 views of the three flagged exams attached, three with ROI boxes. The other 24 rows were counted and skipped, so no exams came back.',
+  'Registry entries arrive last and resolve the keys the exams have held since step 1. The one link still dashed points at an exam that was never part of this subset.',
+];
+
+// ---------- stepper: a segmented control (four mutually exclusive views)
+const seg = document.getElementById('steps');
+STEP.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'bea-seg-opt'; b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+  b.innerHTML = `<span class="n">${i + 1}</span><span>${s.short}</span>`;
+  seg.appendChild(b);
+});
+const opts = [...seg.querySelectorAll('.bea-seg-opt')];
+let cur = 0;
+function show(i) {
+  cur = i;
+  document.getElementById('prev').disabled = cur === 0;
+  document.getElementById('next').disabled = cur === S.length - 1;
+  drawStep(cur);
+  document.getElementById('fig-title').textContent = `Step ${cur + 1}: ${STEP[cur].title}`;
+  document.getElementById('s-title').textContent = STEP[cur].title;
+  document.getElementById('s-code').innerHTML = STEP[cur].code;
+  document.getElementById('s-changes').innerHTML = changes(cur);
+  document.getElementById('s-tables').innerHTML = tables(cur);
+  document.getElementById('s-counts').innerHTML = counts(cur);
+  document.getElementById('caption').textContent = CAPTIONS[cur];
+  [...document.querySelectorAll('#ids tr[data-i]')].forEach(r => r.classList.toggle('cur', +r.dataset.i === cur));
+}
+Bea.segmented(seg, show);
+const go = i => { if (i >= 0 && i < S.length && i !== cur) opts[i].click(); };
+document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+document.getElementById('next').addEventListener('click', () => go(cur + 1));
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea')) return;
+  if (e.key === 'ArrowRight') go(cur + 1);
+  if (e.key === 'ArrowLeft') go(cur - 1);
+});
+
+// ---------- identity table
+const tracked = Object.keys(S[1].tracked);
+let ids = `<tr><th>After step</th>${tracked.map(t => `<th>${esc(t)}</th>`).join('')}</tr>`;
+ids += `<tr data-i="0"><td>1 · source graph</td>${tracked.map((t, j) => `<td class="addr">${j === 0 ? S[1].source_exam_py : '—'}</td>`).join('')}</tr>`;
+for (let i = 1; i < S.length; i++) {
+  ids += `<tr data-i="${i}"><td>${i + 1} · workup subset</td>${tracked.map(t => {
+    const same = i > 1 && S[i].tracked[t] === S[i - 1].tracked[t];
+    return `<td class="addr"><span>${S[i].tracked[t]}${same ? badge('positive', 'same object') : ''}</span></td>`;
+  }).join('')}</tr>`;
+}
+document.getElementById('ids').innerHTML = ids;
+
+// ---------- scale
+const sc = D.scale;
+if (!sc) {
+  document.getElementById('scale-card').hidden = true;
+} else {
+  const pct = sc.attached / sc.image_rows * 100;
+  document.getElementById('scale-lede').innerHTML = `A second synthetic run: ${fmt(sc.patients)} patients and ${fmt(sc.magview_rows)} MagView rows, partitioned to the ${fmt(sc.subset_before.exam)} exams with a suspicious or highly suggestive finding. Then all ${fmt(sc.image_rows)} image rows were loaded into that subset in one <code>parents="existing"</code> call, with no filtering by the caller.`;
+  const bar = document.getElementById('scale-bar');
+  bar.setAttribute('aria-label', `${fmt(sc.attached)} of ${fmt(sc.image_rows)} image rows attached; ${fmt(sc.skipped)} outside the subset were counted and skipped`);
+  bar.innerHTML = `<div class="attached" style="width: ${pct}%"></div><div class="outside"></div>`;
+  document.getElementById('scale-labels').innerHTML = `<span>${icon('positive')}<b>${fmt(sc.attached)}</b> image rows attached to subset exams</span><span class="out">${fmt(sc.skipped)} outside the subset, counted and skipped</span>`;
+  const tile = (key, before, after, note) => `<div class="bea-tile"><div class="bea-tile-key">${key}</div><div class="bea-tile-value">${before} → <span data-count="${after}">${fmt(after)}</span></div><div class="note">${note}</div></div>`;
+  document.getElementById('scale-tiles').innerHTML =
+    tile('Subset exams', fmt(sc.subset_before.exam), sc.subset_after.exam, 'before → after the image load') +
+    tile('Subset patients', fmt(sc.subset_before.patient), sc.subset_after.patient, 'before → after the image load') +
+    `<div class="bea-tile"><div class="bea-tile-key">Image load</div><div class="bea-tile-value">${sc.seconds.images.toFixed(2)} s</div><div class="note">one run on Python ${esc(D.provenance.python)}; the clinical load took ${sc.seconds.clinical.toFixed(2)} s</div></div>`;
+  document.querySelectorAll('#scale-tiles [data-count]').forEach(n => Bea.countUp(n, +n.dataset.count));
+}
+
+const pv = D.provenance;
+document.getElementById('foot').innerHTML = `Generated by <code>python -m tools.visualization.graph_assembly</code> with <code>embed_data_graph</code> ${esc(pv.library)}${pv.commit ? ` at commit <code>${esc(pv.commit)}</code>` : ''}, on synthetic rows. Node states, edges, unresolved keys, issue counts and object ids come from the graph after each call. Assessment codes are EMBED BI-RADS letters: N negative, B benign, P probably benign, S suspicious, M highly suggestive of malignancy, A additional evaluation needed. Hover a node for its Python object id at that step; use ← and → to step.`;
+
+show(0);
+})();
+</script>
+</body>
+</html>
