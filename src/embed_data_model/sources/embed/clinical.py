@@ -22,7 +22,7 @@ from embed_data_model.clinical.procedures import Procedure
 from embed_data_model.core.codes import Code
 from embed_data_model.core.graph import DatasetGraph
 from embed_data_model.core.source import Issue, IssueSeverity
-from embed_data_model.sources.embed._values import cell, identifier, reconcile_merge
+from embed_data_model.sources.embed._values import Claims, cell, identifier, reconcile_merge, record_claims
 from embed_data_model.sources.embed.procedures_pathology import normalize_pathology, normalize_procedure
 
 ColumnMap = Mapping[str, Optional[str]]
@@ -42,7 +42,7 @@ class _Snapshot:
     graph: DatasetGraph
     merge: bool
     issues: List[Issue]
-    claims: Dict[str, Set[str]]
+    claims: Claims
     addressed: Set[Any] = field(default_factory=set)
     unresolved: Dict[Any, List[Dict[str, Any]]] = field(default_factory=lambda: defaultdict(list))
 
@@ -80,12 +80,12 @@ def load_clinical(
     columns: Mapping[str, ColumnMap],
     mode: str,
     issues: List[Issue],
-    claims: Dict[str, Set[str]],
+    claims: Claims,
 ) -> None:
     """Apply procedure, pathology, registry and association rows to ``graph``.
 
-    Source patient claims are recorded in ``claims`` by accession for the
-    caller to apply once for the whole invocation.
+    Source patient claims are recorded in ``claims`` by accession and source
+    table for the caller to apply once for the whole invocation.
     """
 
     if mode not in {"refresh", "merge"}:
@@ -96,9 +96,9 @@ def load_clinical(
     for rows, wide in ((procedures, False), (magview, True)):
         for row in rows:
             _collect_procedure(state, row, columns["procedures"], wide, procedure_rows)
-    for rows in (pathology, magview):
+    for table, rows in (("pathology", pathology), ("magview", magview)):
         for row in rows:
-            _collect_pathology(state, row, columns["pathology"], procedure_rows, pathology_rows)
+            _collect_pathology(state, row, table, columns["pathology"], procedure_rows, pathology_rows)
     for key, group in procedure_rows.items():
         _apply_procedure(state, key, group)
     for key, pathology_group in pathology_rows.items():
@@ -121,7 +121,7 @@ def _collect_procedure(
     if wide and cell(row, columns.get("performed_date")) is None and cell(row, columns.get("procedure_type")) is None:
         return  # A MagView row without procedure facts describes only a finding.
     attachment = _attachment(row, columns)
-    _claim(state, row, columns)
+    _claim(state, row, "magview" if wide else "procedures", columns)
     state.addressed.add(("clinical", "procedure", attachment))
     procedure, _ = normalize_procedure(row, columns)
     if procedure is None:
@@ -134,6 +134,7 @@ def _collect_procedure(
 def _collect_pathology(
     state: _Snapshot,
     row: Mapping[str, Any],
+    table: str,
     columns: ColumnMap,
     procedure_rows: Dict[Hashable, List[_ProcedureRow]],
     grouped: Dict[Hashable, List[_PathologyRow]],
@@ -142,7 +143,7 @@ def _collect_pathology(
     record_id = _id_at(row, columns.get("record_id"))
     if not fields and not descriptors and record_id is None:
         return
-    _claim(state, row, columns)
+    _claim(state, row, table, columns)
     attachment = _attachment(row, columns)
     procedure, _ = normalize_procedure(row, columns)
     if procedure is not None:
@@ -298,7 +299,7 @@ def _apply_associations(state: _Snapshot, rows: Iterable[Mapping[str, Any]], col
         accession = _id_at(row, columns.get("accession"))
         if accession is None:
             continue
-        _claim(state, row, columns)
+        _claim(state, row, "magview", columns)
         if assignment_column is not None and assignment_column in row:
             patient_id = _id_at(row, columns.get("patient_id"))
             for registry_id in _identifiers(cell(row, assignment_column)):
@@ -351,8 +352,8 @@ def _exam(graph: DatasetGraph, accession: str) -> Exam:
     return graph.exam(accession) or graph.register(Exam(accession))
 
 
-def _claim(state: _Snapshot, row: Mapping[str, Any], columns: ColumnMap) -> None:
-    """Ensure the row's patient and exam exist and record its patient claim."""
+def _claim(state: _Snapshot, row: Mapping[str, Any], table: str, columns: ColumnMap) -> None:
+    """Ensure the row's patient and exam exist and record its claim for ``table``."""
 
     accession = _id_at(row, columns.get("accession"))
     patient_id = _id_at(row, columns.get("patient_id"))
@@ -361,7 +362,7 @@ def _claim(state: _Snapshot, row: Mapping[str, Any], columns: ColumnMap) -> None
     if accession is not None:
         _exam(state.graph, accession)
         if patient_id is not None:
-            state.claims.setdefault(accession, set()).add(patient_id)
+            record_claims(state.claims, accession, table, (patient_id,))
 
 
 def _link(graph: DatasetGraph, kind: str, key: Hashable, attachment: Attachment) -> None:

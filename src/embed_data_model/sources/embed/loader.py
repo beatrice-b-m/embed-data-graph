@@ -33,8 +33,10 @@ from embed_data_model.sources.embed._values import (
     cell,
     code,
     identifier,
+    Claims,
     is_missing,
     outside_graph_issue,
+    record_claims,
     reconcile_merge,
     same as _same,
     scalar,
@@ -197,6 +199,10 @@ def load_embed(
     Coded values (assessment, recommendation, procedure type, pathology
     descriptors) are trimmed and uppercased before comparison and storage.
 
+    Source patient claims are kept per table. Refresh replaces the claims a
+    table supplied before; claims from other tables remain, so an exam's
+    ``asserted_patient_ids`` does not depend on load order.
+
     ROI input replaces the complete addressed collection in either mode, including
     manual annotations. Save/pop manual ROIs before replacement if needed.
     Association refresh replaces supplied sets; merge unions them. Explicit null
@@ -280,7 +286,7 @@ def load_embed(
         "findings": materialized["findings"] + projected["findings"],
     }
     # Source patient claims per accession, applied once after every adapter ran.
-    claims: dict[str, set[str]] = {}
+    claims: Claims = {}
     _load_patients(core_rows["patients"], graph, column_maps["patients"], mode, issues)
     _load_exams(core_rows["exams"], graph, column_maps["exams"], mode, issues, claims)
     _load_findings(core_rows["findings"], graph, column_maps["findings"], mode, issues, resolved_scope, claims)
@@ -576,7 +582,7 @@ def _load_exams(
     columns: Mapping[str, Optional[str]],
     mode: str,
     issues: list[Issue],
-    claims: dict[str, set[str]],
+    claims: Claims,
 ) -> None:
     groups = _group_rows(rows, columns, ("accession",), "exam", issues)
     for key in sorted(groups, key=repr):
@@ -618,7 +624,7 @@ def _load_findings(
     mode: str,
     issues: list[Issue],
     source_scope: str,
-    claims: dict[str, set[str]],
+    claims: Claims,
 ) -> None:
     groups = _group_rows(
         rows,
@@ -861,34 +867,44 @@ def _claim_exam_from_rows(
     exam: Any,
     rows: Sequence[_InputRow],
     columns: Mapping[str, Optional[str]],
-    claims_by_exam: dict[str, set[str]],
+    claims: Claims,
 ) -> None:
     patient_column = columns.get("patient_id")
-    claims = {pid for pid in (_id_at(row.mapping, patient_column) for row in rows) if pid is not None}
-    for patient_id in claims:
-        _ensure_patient(graph, patient_id)
-    claims_by_exam.setdefault(exam.accession_number, set()).update(claims)
+    for row in rows:
+        patient_id = _id_at(row.mapping, patient_column)
+        if patient_id is not None:
+            _ensure_patient(graph, patient_id)
+            record_claims(claims, exam.accession_number, row.table, (patient_id,))
 
 
 def _apply_patient_claims(
     graph: DatasetGraph,
-    claims_by_exam: Mapping[str, set[str]],
+    claims: Claims,
     mode: str,
 ) -> None:
     """Apply the patient claims one invocation supplied for each exam.
 
-    Refresh replaces an exam's claims with this snapshot's claims, so a
-    corrected source patient ID replaces the old one. Merge adds them.
+    Claims are kept per source table. Refresh replaces the claims a table
+    supplied before with the ones it supplies now, so reloading a corrected
+    table corrects its claim; claims from other tables, and claims added
+    outside the loader, remain. Merge adds to the table's claims. The exam's
+    ``asserted_patient_ids`` is their union, so the result does not depend on
+    the order in which tables are loaded.
     """
 
-    for accession, claims in claims_by_exam.items():
+    for accession, by_table in claims.items():
         exam = graph.exam(accession)
-        if exam is None or not claims:
+        supplied = {table: ids for table, ids in by_table.items() if ids}
+        if exam is None or not supplied:
             continue
-        if mode == "refresh":
-            graph.set_patient_claims(exam, claims)
-        else:
-            graph.claim_patient(exam, claims)
+        current = set(exam.asserted_patient_ids)
+        # Only claims the exam still asserts count; a caller may have removed some.
+        sources = {table: set(ids) & current for table, ids in getattr(exam, "_claim_sources", {}).items()}
+        untracked = current.difference(*sources.values())
+        for table, ids in supplied.items():
+            sources[table] = set(ids) if mode == "refresh" else sources.get(table, set()) | ids
+        graph.set_patient_claims(exam, untracked.union(*sources.values()))
+        graph.update(exam, _claim_sources={table: frozenset(ids) for table, ids in sources.items() if ids})
 
 
 def _group_rows(

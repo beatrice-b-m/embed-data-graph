@@ -14,12 +14,12 @@ from embed_data_model.core.source import Issue
 from embed_data_model.imaging.images import MammogramImage
 from embed_data_model.imaging.rois import RegionOfInterest
 from embed_data_model.sources.embed._values import (
-    cell, identifier, is_missing, outside_graph_issue, reconcile_merge, whole_number)
+    Claims, cell, identifier, is_missing, outside_graph_issue, reconcile_merge, record_claims, whole_number)
 
 
 def load_imaging(*, images: list[Mapping[str, Any]], rois: Optional[list[Mapping[str, Any]]],
                  graph: Any, columns: Mapping[str, Mapping[str, Optional[str]]],
-                 mode: str, issues: list[Issue], claims: dict[str, set[str]],
+                 mode: str, issues: list[Issue], claims: Claims,
                  create_images: bool = True) -> None:
     """Each ROI-bearing row supplies a complete collection, never a row identity.
 
@@ -79,7 +79,7 @@ def load_imaging(*, images: list[Mapping[str, Any]], rois: Optional[list[Mapping
             for claim in patient_values:
                 if graph.patient(claim) is None:
                     graph.register(Patient(claim))
-            claims.setdefault(accession, set()).update(patient_values)
+            record_claims(claims, accession, "images", patient_values)
 
     automatic: dict[str, list[tuple[Mapping[str, Any], MammogramImage]]] = defaultdict(list)
     explicit: dict[str, list[tuple[Mapping[str, Any], MammogramImage]]] = defaultdict(list)
@@ -131,6 +131,10 @@ def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], i
     if path and parsed is None:
         _issue(issues, "unparseable_image_path", "Path does not match cohort/patient/study/series/SOP.dcm", path=path)
     uid = explicit_uid or (parsed["source_sop_instance_uid"] if parsed else None)
+    explicit_patient = identifier(_mapped(row, columns, "patient_id"))
+    if explicit_patient and parsed and explicit_patient != parsed["patient_id"]:
+        _issue(issues, "source_patient_path_mismatch", "Explicit patient ID wins over path-derived patient ID",
+               explicit_patient_id=explicit_patient, path_patient_id=parsed["patient_id"], path=path)
     explicit_id = identifier(_mapped(row, columns, "image_id"))
     derived = _mapped(row, columns, "derived_from")
     if is_missing(derived):
@@ -181,7 +185,7 @@ def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], i
                 fields[field] = parsed[field]
     return {"group": image_id if derived is not None else uid or image_id, "image_id": image_id,
             "source_sop_instance_uid": uid, "source_paths": {path} if path else set(), "derived_from": derived,
-            "patient": identifier(_mapped(row, columns, "patient_id")) or (parsed["patient_id"] if parsed else None),
+            "patient": explicit_patient or (parsed["patient_id"] if parsed else None),
             "accession": identifier(_mapped(row, columns, "accession")), "managed": set(fields), "fields": fields}
 
 

@@ -545,8 +545,9 @@ class DatasetGraph:
     def set_patient_claims(self, exam: Exam, patient_ids: Iterable[str]) -> None:
         """Replace an exam's source patient claims and reconcile its owner.
 
-        Refresh uses this so a corrected source patient ID replaces the earlier
-        claim. Ownership chosen with ``assign_patient`` persists.
+        This replaces every claim, whichever table supplied it; ``load_embed``
+        refresh replaces only the claims of the tables it loads. Ownership
+        chosen with ``assign_patient`` persists.
         """
 
         self._require_member(exam)

@@ -10,7 +10,7 @@ from __future__ import annotations
 from enum import Enum
 from math import isfinite
 from numbers import Integral, Real
-from typing import Any, Mapping, MutableMapping, Optional
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Set
 
 from embed_data_model.core.source import Issue, IssueSeverity, is_null_scalar
 
@@ -144,6 +144,16 @@ def reconcile_merge(
                 context={"identity": key, "field": name, "values": [existing, value]},
             )
         )
+
+
+Claims = Dict[str, Dict[str, Set[str]]]
+"""Source patient claims one invocation supplied: accession to table to IDs."""
+
+
+def record_claims(claims: Claims, accession: str, table: str, patient_ids: Iterable[str]) -> None:
+    """Record the patient IDs that ``table``'s rows claim for an exam."""
+
+    claims.setdefault(accession, {}).setdefault(table, set()).update(patient_ids)
 
 
 def outside_graph_issue(table: str, rows: int) -> Issue:
