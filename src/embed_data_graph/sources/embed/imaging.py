@@ -124,13 +124,14 @@ def load_imaging(*, images: list[Mapping[str, Any]], rois: Optional[list[Mapping
 
 def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], issues: list[Issue]) -> Optional[dict[str, Any]]:
     path = identifier(_mapped(row, columns, "source_path"))
+    # The filename names the SOP wherever the file is stored; the cohort
+    # layout only adds optional patient, study and series facts.
+    path_uid = _path_sop_uid(path)
     parsed = _parse_embed_path(path)
     explicit_uid = identifier(_mapped(row, columns, "source_sop_instance_uid"))
-    if explicit_uid and parsed and explicit_uid != parsed["source_sop_instance_uid"]:
-        _issue(issues, "source_sop_path_mismatch", "Explicit SOP wins over path-derived SOP", explicit_uid=explicit_uid, path_uid=parsed["source_sop_instance_uid"], path=path)
-    if path and parsed is None:
-        _issue(issues, "unparseable_image_path", "Path does not match cohort/patient/study/series/SOP.dcm", path=path)
-    uid = explicit_uid or (parsed["source_sop_instance_uid"] if parsed else None)
+    if explicit_uid and path_uid and explicit_uid != path_uid:
+        _issue(issues, "source_sop_path_mismatch", "Explicit SOP wins over path-derived SOP", explicit_uid=explicit_uid, path_uid=path_uid, path=path)
+    uid = explicit_uid or path_uid
     explicit_patient = identifier(_mapped(row, columns, "patient_id"))
     if explicit_patient and parsed and explicit_patient != parsed["patient_id"]:
         _issue(issues, "source_patient_path_mismatch", "Explicit patient ID wins over path-derived patient ID",
@@ -144,7 +145,7 @@ def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], i
         return None
     image_id = explicit_id or uid
     if not image_id:
-        _issue(issues, "unresolved_image_identity", "Image needs explicit identity or a valid source path")
+        _issue(issues, "unresolved_image_identity", "Image needs an explicit ID, an explicit SOP UID or a source path ending in <SOP>.dcm", path=path)
         return None
     fields: dict[str, Any] = {}
     scalar_map = {"laterality": "laterality", "view_position": "view_position", "height": "height", "width": "width",
@@ -207,8 +208,7 @@ def _roi_image(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], ima
         image = graph.image_at_path(path)
         if image is not None:
             return image
-    parsed = _parse_embed_path(path)
-    uid = uid or (parsed["source_sop_instance_uid"] if parsed else None)
+    uid = uid or _path_sop_uid(path)
     image = graph.source_image(uid) if uid else None
     if image is not None:
         if path:
@@ -316,16 +316,38 @@ def _literal(value: Any) -> Any:
     return ast.literal_eval(value) if isinstance(value, str) else None if is_missing(value) else value
 
 
-def _parse_embed_path(path: Optional[str]) -> Optional[dict[str, str]]:
+def _path_sop_uid(path: Optional[str]) -> Optional[str]:
+    """Return the SOP UID named by a ``<SOP>.dcm`` filename, whatever its directories.
+
+    The ``.dcm`` suffix is matched case-insensitively. A path with another
+    suffix or an empty stem names no SOP UID.
+    """
+
     if path is None:
+        return None
+    filename = PurePosixPath(path.replace("\\", "/")).name
+    if not filename.lower().endswith(".dcm") or not filename[:-4].strip():
+        return None
+    return filename[:-4]
+
+
+def _parse_embed_path(path: Optional[str]) -> Optional[dict[str, str]]:
+    """Return patient, study and series facts from a ``cohortN/patient/study/series/SOP.dcm`` path.
+
+    These facts are optional context; image identity comes from
+    :func:`_path_sop_uid`, which accepts any directory layout.
+    """
+
+    uid = _path_sop_uid(path)
+    if path is None or uid is None:
         return None
     parts = PurePosixPath(path.replace("\\", "/")).parts
     if len(parts) < 5:
         return None
-    cohort, patient, study, series, filename = parts[-5:]
-    if not cohort.startswith("cohort") or not cohort[6:].isdigit() or not all((patient, study, series)) or not filename.lower().endswith(".dcm") or not filename[:-4]:
+    cohort, patient, study, series, _ = parts[-5:]
+    if not cohort.startswith("cohort") or not cohort[6:].isdigit() or not all((patient, study, series)):
         return None
-    return dict(patient_id=patient, study_instance_uid=study, series_instance_uid=series, source_sop_instance_uid=filename[:-4])
+    return dict(patient_id=patient, study_instance_uid=study, series_instance_uid=series, source_sop_instance_uid=uid)
 
 
 def _issue(issues: list[Issue], code: str, message: str, **context: Any) -> None:

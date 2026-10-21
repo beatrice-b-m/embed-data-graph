@@ -55,9 +55,11 @@ unresolved records.
 Unkeyed histories are patient-scoped reported facts, without inferred event identity.
 
 An image's mutable `image_id` is separate from its source SOP UID and path aliases.
-The adapter can recover source identity from the EMBED path convention
-`cohortN/patient/study/series/SOP.dcm`. Explicit SOP UIDs take precedence over
-conflicting path-derived UIDs. Derivatives have explicit IDs and `derived_from`.
+Without an explicit SOP UID, the adapter takes source identity from the
+`<SOP>.dcm` filename in any directory layout. The EMBED path convention
+`cohortN/patient/study/series/SOP.dcm` additionally supplies patient, study and
+series context. Explicit SOP UIDs take precedence over conflicting
+path-derived UIDs. Derivatives have explicit IDs and `derived_from`.
 
 An ROI has an image-local collection key. Source annotation positions are zero-based
 addresses within the loaded collection, not durable lesion identities. Equal boxes

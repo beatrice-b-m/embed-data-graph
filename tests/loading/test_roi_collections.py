@@ -123,7 +123,7 @@ def test_invalid_path_can_load_explicit_identity_and_frame_facts_are_not_inferre
     report = load_embed(images=[row(anon_dicom_path="invalid", uid="U", ImagesInAcquisition=10, FinalImageType="DBT", ROI_coords="[(0,0,1,1)]")], columns={"images":{"source_sop_instance_uid":"uid"}})
     assert report.graph.source_image("U") is not None
     assert report.graph.rois[0].source_frame_indices == ()
-    assert any(i.code == "unparseable_image_path" for i in report.issues)
+    assert not report.issues
 
 
 def test_unbound_image_fields_and_merge_null_fields_preserve_current_values():
