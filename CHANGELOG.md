@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Image and ROI rows take the source SOP UID from a `<SOP>.dcm` filename in any
+  directory layout. Previously the path had to match
+  `cohortN/patient/study/series/SOP.dcm`, so anonymized tables, which have no
+  SOP column, dropped files stored elsewhere with `unresolved_image_identity`.
+  A mapped SOP column still wins, and `source_sop_path_mismatch` now compares
+  it with the filename. A matching cohort layout still supplies patient, study
+  and series facts.
+
+### Changed
+
+- `unparseable_image_path` is no longer reported, because the directory layout
+  no longer decides whether an image loads. A path that names no SOP UID and
+  leaves the row without identity is reported as `unresolved_image_identity`,
+  whose context now includes the path. Consumers that filtered on
+  `unparseable_image_path` can drop that filter.
+
 ## 0.3.0 — 2026-09-28
 
 Source release `v0.3.0`. This release renames the project to EMBED Data Graph.
