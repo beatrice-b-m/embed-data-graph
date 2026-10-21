@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-10-21
+
+Source release `v0.3.1`. This patch release fixes image identity: image and ROI
+rows stored outside the `cohortN/patient/study/series/SOP.dcm` layout now load
+by their `<SOP>.dcm` filename. The public API, Python 3.9–3.13 support and the
+absence of mandatory runtime dependencies are unchanged.
 
 ### Fixed
 
