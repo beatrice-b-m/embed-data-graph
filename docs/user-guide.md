@@ -390,11 +390,13 @@ preserves existing unkeyed facts while reporting the limitation.
 ## Images and ROI collections
 
 `MammogramImage.image_id` is the mutable model identity. The original
-`source_sop_instance_uid` and `source_paths` are separate source facts. A path
-matching the EMBED convention
-`cohortN/patient/study/series/SOP.dcm` can supply source identity and study or
-series context without opening pixels. An explicit SOP UID wins if it conflicts
-with a path-derived UID, and the report carries an issue. Relocating a file
+`source_sop_instance_uid` and `source_paths` are separate source facts.
+EMBED files are named `<SOPInstanceUID>.dcm`, so without a mapped SOP column the
+filename supplies source identity wherever the file is stored. A path that also
+matches the EMBED convention `cohortN/patient/study/series/SOP.dcm` supplies
+patient, study and series context without opening pixels. An explicit SOP UID
+wins if it conflicts with the filename, and the report carries a
+`source_sop_path_mismatch` issue. Relocating a file
 adds a path alias; rekeying the model image does not break source lookup.
 
 Image metadata automatically projects its `ROI_coords` collection. A row in

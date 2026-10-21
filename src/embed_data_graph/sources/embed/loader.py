@@ -125,6 +125,11 @@ def load_embed(
     images, rois : iterable of mappings or DataFrame-like, optional
         Image metadata and complete image-local ROI collections. Default None
         skips explicit input. Image rows can also project ROI collections.
+        An image's source SOP UID is the mapped explicit SOP column, else the
+        source-path filename minus a case-insensitive ``.dcm`` suffix in any
+        directory layout; a ``cohortN/patient/study/series/SOP.dcm`` path also
+        supplies patient, study and series facts. Rows with neither, and no
+        explicit ``image_id``, are dropped with ``unresolved_image_identity``.
         Missing/null ROI coordinates preserve the collection; an explicit empty
         list clears it. Explicit rois take precedence for addressed images.
     hormone_history, procedure_history : iterable of mappings or DataFrame-like, optional

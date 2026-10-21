@@ -173,10 +173,16 @@ ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values
 ## Imaging and supplied association collections
 
 `image_id` is model identity; `source_sop_instance_uid` is original identity;
-`source_paths` stores location aliases. The adapter parses trailing
-`cohortN/patient/study/series/SOP.dcm` path components. Explicit UID wins over disagreement and the
-conflicting path UID is not a SOP alias; the supplied path remains a location alias
-for the explicit UID. Derivatives require explicit model IDs and
+`source_paths` stores location aliases. The source SOP UID is the mapped explicit
+SOP column or, without one, the `source_path` filename with a case-insensitive
+`.dcm` suffix removed, whatever directories hold it; a path with another suffix
+or an empty stem names no UID. Image and ROI rows apply the same rule. A path
+whose trailing components match `cohortN/patient/study/series/SOP.dcm` also
+supplies patient, study and series facts, but the layout never decides whether
+an image loads. Explicit UID wins over disagreement with `source_sop_path_mismatch`,
+and the conflicting path UID is not a SOP alias; the supplied path remains a
+location alias for the explicit UID. A row with no explicit ID, no explicit SOP
+and no `<SOP>.dcm` filename is dropped with `unresolved_image_identity`. Derivatives require explicit model IDs and
 `derived_from`; source reload follows the original even after model rekey.
 An update or rekey that would give two original images the same source SOP raises
 ValueError before changing fields or source indexes. The check uses the proposed
