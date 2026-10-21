@@ -11,19 +11,19 @@ into a standard vocabulary or aggregate source values. Coded fields keep their
 source code next to its meaning, conflicting values are reported rather than
 silently resolved, and no diagnosis is inferred.
 
-The package is version `0.3.0`. Its distribution name is `embed-data-graph` and
+The package is version `0.3.1`. Its distribution name is `embed-data-graph` and
 its Python namespace is `embed_data_graph`. The source repository is
 [beatrice-b-m/embed-data-graph](https://github.com/beatrice-b-m/embed-data-graph).
 
 ## Install from the checkout
 
-The current source release is tagged `v0.3.0`. From a clone, install the
+The current source release is tagged `v0.3.1`. From a clone, install the
 development environment at the repository root:
 
 ```bash
 git clone https://github.com/beatrice-b-m/embed-data-graph.git
 cd embed-data-graph
-git checkout v0.3.0
+git checkout v0.3.1
 uv sync --frozen
 uv run --frozen python -m examples.researcher_journeys
 ```
@@ -38,7 +38,7 @@ To install the tagged source release into a downstream environment:
 
 ```bash
 python -m pip install \
-  "git+https://github.com/beatrice-b-m/embed-data-graph.git@v0.3.0"
+  "git+https://github.com/beatrice-b-m/embed-data-graph.git@v0.3.1"
 ```
 
 For a reproducible source install from another revision, pin the exact commit
