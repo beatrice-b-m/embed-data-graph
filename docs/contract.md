@@ -44,7 +44,10 @@ disagrees with its EMBED path claims the column's patient and is reported.
 
 A finding's side is an attribute, not part of its identity. In EMBED a supplied
 null finding side means bilateral (code `B`) and projects to both breast sides;
-a side column absent from every row leaves the side unknown.
+a side column absent from every row leaves the side unknown. Finding sides list
+the breasts with a finding, not the breasts imaged; an exam's imaged laterality
+comes from its description and image laterality only, and an underivable one
+stays unknown rather than defaulting to a side.
 
 Procedure identity requires patient, performed date, procedure type, and laterality.
 Pathology uses an explicit patient-scoped record ID or, for MagView rows, the
