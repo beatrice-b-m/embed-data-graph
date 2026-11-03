@@ -129,15 +129,34 @@ class Patient(MutableEntity):
 
     @property
     def procedures(self) -> Tuple["Procedure", ...]:
-        """Procedures of this patient's exams, once each."""
+        """Procedures of this patient, once each.
 
-        return _unique(procedure for exam in self.exams for procedure in exam.procedures)
+        Procedures whose identity names this patient come first, in
+        registration order, whether or not they are attached to an exam; then
+        those reached through the patient's exams. Rows that could not resolve
+        a procedure identity are in ``unresolved_clinical_records``.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "procedure")
+        return _unique([*named, *(procedure for exam in self.exams for procedure in exam.procedures)])
 
     @property
     def pathology(self) -> Tuple["Pathology", ...]:
-        """Pathology of this patient's exams, once each."""
+        """Pathology of this patient, once each.
 
-        return _unique(item for exam in self.exams for item in exam.pathology)
+        Bundles whose identity names this patient come first, in registration
+        order, whether or not an exam reaches them; then those reached through
+        the patient's exams.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "pathology")
+        return _unique([*named, *(item for exam in self.exams for item in exam.pathology)])
 
     @property
     def registry_entries(self) -> Tuple["CancerRegistryEntry", ...]:
