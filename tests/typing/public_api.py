@@ -51,3 +51,5 @@ research_roi = ResearchROI.from_embed_coordinates((0, 0, 9, 9), image_id="I", ro
 assert_type(research_roi, ResearchROI)
 assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
+assert_type(Exam("C").location_id, Optional[str])
+assert_type(load_embed(body_measurements=[{"empi_anon": "P", "collection_date_anon": "2020-01-01"}]), LoadReport)
