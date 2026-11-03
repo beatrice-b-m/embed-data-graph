@@ -134,9 +134,20 @@ class Patient(MutableEntity):
 
     @property
     def registry_entries(self) -> Tuple["CancerRegistryEntry", ...]:
-        """Registry entries assigned to this patient's exams, once each."""
+        """Keyed registry entries of this patient, once each.
 
-        return _unique(entry for exam in self.exams for entry in exam.registry_entries)
+        Entries whose key names this patient come first, in registration
+        order, whether or not any exam is assigned to them. Entries of another
+        patient that are assigned to this patient's exams follow. A patient
+        without a graph has none. Registry rows without a registry ID are in
+        ``unkeyed_registry_entries``.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "registry")
+        return _unique([*named, *(entry for exam in self.exams for entry in exam.registry_entries)])
 
     def add_exam(self, exam: "Exam") -> "Exam":
         """Make this patient the exam's owner and source claim; return the exam.
