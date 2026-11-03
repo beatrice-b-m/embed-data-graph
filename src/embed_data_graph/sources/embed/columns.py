@@ -1,8 +1,8 @@
 """Small, table-local column maps for the EMBED source loader.
 
 The maps bind only source facts that are established at this adapter boundary.
-Every bound default names a column that exists in the internal EMBED MagView
-or V1c image-metadata tables; semantic fields without such a column default to
+Every bound default names a column that exists in the internal EMBED MagView,
+patient-history or V1c image-metadata tables; semantic fields without such a column default to
 None and can be bound explicitly through ``columns``.
 In particular, registry payload fields and future image identity fields remain
 explicitly configurable instead of being guessed from similarly named columns.
@@ -133,6 +133,27 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "result": "result",
             }
         ),
+        "cancer_history": MappingProxyType(
+            {
+                "patient_id": "empi_anon",
+                "record_id": None,
+                "accession": "acc_anon",
+                "subject": "patient",
+                "relationship": "rel",
+                "category": "type",
+                "cancer_code": "cancercode",
+                "side": "side",
+                "bilateral": "bilat",
+                "premenopausal": "premen",
+                "diagnosis_age": "diag_age",
+                "diagnosis_month": "month",
+                "diagnosis_year": "year",
+                "current_age": "curr_age",
+                "brca1": "brca1",
+                "brca2": "brca2",
+                "comment": "comment",
+            }
+        ),
         "procedures": MappingProxyType(
             {
                 "patient_id": "empi_anon",
@@ -197,6 +218,7 @@ _REQUIRED = {
     "rois": frozenset({"coordinates"}),
     "hormone_history": frozenset({"patient_id", "category", "medication"}),
     "procedure_history": frozenset({"patient_id", "category", "procedure"}),
+    "cancer_history": frozenset({"patient_id"}),
     "procedures": frozenset(
         {"patient_id", "performed_date", "procedure_type", "laterality"}
     ),
