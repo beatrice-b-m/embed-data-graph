@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Patient.history_known_on` and `Patient.history_as_of`. Reported history is
+  captured at the intake of its context exam, so a fact is known on that exam's
+  date, resolved on each access; facts without a resolvable date are left out
+  of `history_as_of`. A load reports history with no context accession, or
+  whose loaded context exam has no date or belongs to another patient, once per
+  call as the WARNING `history_known_on_unresolved`.
+- `Patient.attribute_resolution`, returning `AttributeResolution` with an
+  `AttributeStatus` (`embed_data_graph.clinical.attributes`), so a caller can
+  tell an attribute that was never reported from one whose latest reports
+  disagree. `attribute_as_of` is unchanged.
+
 ## 0.3.1 — 2026-10-21
 
 Source release `v0.3.1`. This patch release fixes image identity: image and ROI
