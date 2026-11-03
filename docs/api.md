@@ -162,7 +162,23 @@ benign result.
 History observations with an explicit record ID are updated in place on reload.
 Without one they are snapshots of reported facts: never performed procedures and
 never inferred distinct events. Patient attribute observations record one value
-per exam context; choose among them with `Patient.attribute_as_of`.
+per exam context; choose among them with `Patient.attribute_as_of`, or with
+`Patient.attribute_resolution`, which returns an `AttributeResolution` whose
+`status` (`AttributeStatus` in `embed_data_graph.clinical.attributes`) tells a
+value that was never reported (`NOT_REPORTED`) from one whose latest qualifying
+reports disagree (`CONFLICT`), with that date and its `candidates`. Neither falls
+back to an earlier agreeing value; reduce `attribute_history` for that.
+
+Reported history is captured at the intake of its context exam, so
+`Patient.history_known_on(observation)` is the context exam's date, looked up
+on each call so exams may load before or after the history.
+`Patient.history_as_of(date, kind=None)` returns the facts known on or before
+the date and leaves out those without a resolvable date: no context accession,
+a context exam that is not loaded, owned or claimed by another patient, or
+without an ISO date. A load reports the first, third and fourth cases once per
+call as the WARNING `history_known_on_unresolved` with counts by reason; an
+exam not yet loaded is not reported because a later load can resolve it. The
+known-on date is not when the reported event happened.
 
 The eight graph entities are Patient, Exam, Finding, Procedure, Pathology,
 CancerRegistryEntry, MammogramImage and RegionOfInterest. Interpretations and
