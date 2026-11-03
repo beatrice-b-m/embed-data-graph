@@ -4,8 +4,10 @@ The maps bind only source facts that are established at this adapter boundary.
 Every bound default names a column that exists in the internal EMBED MagView
 or V1c image-metadata tables; semantic fields without such a column default to
 None and can be bound explicitly through ``columns``.
-In particular, registry payload fields and future image identity fields remain
-explicitly configurable instead of being guessed from similarly named columns.
+Registry payload defaults name the columns of the internal registry file
+(``registryEMBEDPreprocessed_ANON``); its generic pathology-style fields and
+future image identity fields remain explicitly configurable instead of being
+guessed from similarly named columns.
 """
 
 from __future__ import annotations
@@ -166,6 +168,19 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "patient_id": "empi_anon",
                 "registry_id": "cancer_outcome_registry_id",
                 "record_id": None,
+                "diagnosis_date": "DATE_OF_DIAGNOSIS_ANON",
+                "laterality": "LATERALITY",
+                "histology": "HISTOLOGY_ICDO3",
+                "behavior": "BEHAVIOR_ICDO3",
+                "primary_site": "PRIMARY_SITE",
+                "t_stage": "T_Stage",
+                "n_stage": "N_Stage",
+                "m_stage": "M_Stage",
+                "stage_group": "STAGE_GRP",
+                "estrogen_receptor": "ESTROGEN_RECEPTOR",
+                "progesterone_receptor": "PROGESTERONE_RECEPTOR",
+                "her2": "HER2",
+                "vital_status": "VITAL_STATUS",
                 "diagnosis": None,
                 "result_category": None,
                 "malignant": None,
