@@ -296,7 +296,7 @@ def load_embed(
     _load_exams(core_rows["exams"], graph, column_maps["exams"], mode, issues, claims)
     _load_findings(core_rows["findings"], graph, column_maps["findings"], mode, issues, resolved_scope, claims)
 
-    _load_history(
+    history_patients = _load_history(
         materialized["hormone_history"],
         graph,
         column_maps["hormone_history"],
@@ -304,7 +304,7 @@ def load_embed(
         issues,
         kind="medication",
     )
-    _load_history(
+    history_patients |= _load_history(
         materialized["procedure_history"],
         graph,
         column_maps["procedure_history"],
@@ -339,6 +339,7 @@ def load_embed(
         create_images=parents == "create",
     )
     _apply_patient_claims(graph, claims, mode)
+    _report_history_anchors(graph, history_patients, issues)
 
     return LoadReport(graph=graph, issues=tuple(issues), source_scope=resolved_scope)
 
@@ -776,7 +777,9 @@ def _load_history(
     issues: list[Issue],
     *,
     kind: str,
-) -> None:
+) -> set[str]:
+    """Apply one history table and return the patients it addressed."""
+
     groups = _group_rows(rows, columns, ("patient_id",), f"{kind}_history", issues)
     normalizer = (
         normalize_medication_history
@@ -806,6 +809,35 @@ def _load_history(
             kind,
             mode,
             issues,
+        )
+    return {patient_id for patient_id in groups}
+
+
+def _report_history_anchors(graph: DatasetGraph, patient_ids: set[str], issues: list[Issue]) -> None:
+    """Report, once per call, loaded history whose known-on date cannot be resolved.
+
+    Checked after every grain of the call is loaded. A context exam that is not
+    in the graph is not reported, because exams are often loaded in another
+    call and ``history_known_on`` resolves on each access.
+    """
+
+    reasons: dict[str, int] = {}
+    for patient_id in sorted(patient_ids):
+        patient = graph.patient(patient_id)
+        if patient is None:
+            continue
+        for item in patient.history_observations:
+            reason = patient._history_anchor(item)[1]
+            if reason is not None and reason != "context_exam_not_loaded":
+                reasons[reason] = reasons.get(reason, 0) + 1
+    if reasons:
+        issues.append(
+            Issue(
+                "history_known_on_unresolved",
+                "Reported history without a resolvable context exam date is left out of history_as_of",
+                IssueSeverity.WARNING,
+                context={"observations": sum(reasons.values()), "reasons": dict(sorted(reasons.items()))},
+            )
         )
 
 

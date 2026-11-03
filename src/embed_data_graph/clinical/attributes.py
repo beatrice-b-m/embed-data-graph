@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from typing import Any, Optional, Tuple
 
 
@@ -59,3 +60,62 @@ class PatientAttributeObservation:
         """
 
         return self.attribute, self.accession_number, self.context_date
+
+
+class AttributeStatus(str, Enum):
+    """Why ``Patient.attribute_resolution`` has or lacks a value.
+
+    Members
+    -------
+    REPORTED='reported'
+        Observations on the latest qualifying date agree on one value.
+    NOT_REPORTED='not_reported'
+        No dated observation on or before the cutoff reports a value.
+    CONFLICT='conflict'
+        Observations on the latest qualifying date report different values.
+    """
+
+    REPORTED = "reported"
+    NOT_REPORTED = "not_reported"
+    CONFLICT = "conflict"
+
+
+@dataclass(frozen=True)
+class AttributeResolution:
+    """A patient attribute as of a date, with the reason for its value.
+
+    Attributes
+    ----------
+    attribute : str
+        Attribute name.
+    as_of : datetime.date
+        Inclusive cutoff that was applied.
+    status : AttributeStatus
+        Whether a value was reported, not reported, or in conflict.
+    value : Any
+        The agreed value when ``status`` is REPORTED, else None.
+    context_date : datetime.date or None
+        The latest qualifying observation date; None when not reported.
+    candidates : tuple
+        The distinct values reported on ``context_date``, in observation
+        order; more than one means a conflict. Empty when not reported.
+
+    Notes
+    -----
+    No reduction rule is applied: a conflict on the latest date does not fall
+    back to an earlier agreeing value. Use ``Patient.attribute_history`` to
+    apply one.
+    """
+
+    attribute: str
+    """Attribute name."""
+    as_of: date
+    """Inclusive cutoff that was applied."""
+    status: AttributeStatus
+    """Whether a value was reported, not reported, or in conflict."""
+    value: Any = None
+    """The agreed value when reported, else None."""
+    context_date: Optional[date] = None
+    """The latest qualifying observation date."""
+    candidates: Tuple[Any, ...] = ()
+    """Distinct values reported on ``context_date``."""
