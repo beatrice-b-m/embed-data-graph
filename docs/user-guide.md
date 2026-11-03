@@ -309,7 +309,7 @@ The supported default map is:
 | `patients` | `patient_id <- empi_anon`; exam context `acc_anon`/`studydate_anon`; `sex <- GENDER_DESC`; `race <- race`; `ethnicity <- ethnicity`; `birth_year` unbound |
 | `exams` | `accession <- acc_anon`; `patient_id <- empi_anon`; `exam_date <- studydate_anon`; `exam_description <- desc`; `density <- tissueden`; `exam_type <- mg_exam_type`; `visit_type <- vtype`; `modality <- modality_desc`; `patient_age <- age_at_study_anon` |
 | `findings` | `(accession, finding_number) <- (acc_anon, numfind)`; `patient_id <- empi_anon`; `laterality <- side` (a supplied null side is bilateral, like `B`); `assessment <- asses`; `recommendation <- recc`; `location <- location`; `depth <- depth`; `distance <- distance` (negative values are exceptional codes, kept raw only); descriptors `mass`, `asymmetry`, `arch_distortion`, `calc`, `massshape`, `massmargin`, `massdens`, `calcfind`, `calcdistri`, `calcnumber`, `otherfind`, `implanfind` into `finding.descriptors` as source codes |
-| `images` | source path `anon_dicom_path`; patient/accession `empi_anon`/`acc_anon`; laterality/view `ImageLateralityFinal`/`ViewPosition`; modality `Modality`; derived type `FinalImageType`; dimensions `Rows`/`Columns`; frames `ImagesInAcquisition` (DBT images only); study/series UIDs from the path |
+| `images` | source path `anon_dicom_path`; patient/accession `empi_anon`/`acc_anon`; laterality/view `ImageLateralityFinal`/`ViewPosition`; modality `Modality`; derived type `FinalImageType`; dimensions `Rows`/`Columns`; frames `ImagesInAcquisition` (DBT images only); study/series UIDs from the path; `manufacturer <- Manufacturer`; `series_description <- SeriesDescription`; `dicom_image_type <- ImageType`; `view_modifier <- 0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning`; `spot_magnification <- spot_mag` |
 | `rois` | source path `anon_dicom_path`; coordinates `ROI_coords`; frame facts `ROI_frames`; depth flag `ROI_depth_derived` |
 | `procedures` | identity `(empi_anon, procdate_anon, type, bside)`; optional accession/finding `(acc_anon, numfind)` |
 | `pathology` | optional record ID, otherwise the procedure `(empi_anon, procdate_anon, type, bside)`; attachment `(acc_anon, numfind)`; procedure date `procdate_anon`; report date `pdate_anon`; severity `path_severity`; descriptors `path1` through `path10`; `diagnosis`, `result_category` and `malignant` unbound |
@@ -319,7 +319,29 @@ The supported default map is:
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
 `DEFAULT_COLUMNS` is the authoritative mapping object; the table above is a
-quick reference. The registry identity binding is deliberately narrower than
+quick reference. Image rows keep the manufacturer, series description and
+ImageType as recorded, and derive the DBT form and whether a view is modified:
+
+```python
+from embed_data_graph import DbtForm, ViewModification, load_embed
+
+
+(image,) = load_embed(
+    images=[
+        {
+            "anon_dicom_path": "cohort1/P-004/S/SE/U-004.dcm", "acc_anon": "A-004",
+            "FinalImageType": "3D", "Manufacturer": "HOLOGIC, Inc.",
+            "SeriesDescription": "L CC Tomosynthesis Projection",
+            "ViewPosition": "CC", "ImageLateralityFinal": "L",
+        }
+    ]
+).graph.images
+assert image.dbt_form is DbtForm.PROJECTION
+assert image.view_modification is ViewModification.STANDARD
+```
+
+A spot or magnification view loads with its base `view_position` but
+`view_modification` MODIFIED, so it stays out of standard CC and MLO coverage. The registry identity binding is deliberately narrower than
 the rest of its possible payload. Map additional registry payload fields only
 when their source meanings are established.
 
