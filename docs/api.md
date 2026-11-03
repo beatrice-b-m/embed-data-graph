@@ -167,8 +167,21 @@ per exam context; choose among them with `Patient.attribute_as_of`.
 The eight graph entities are Patient, Exam, Finding, Procedure, Pathology,
 CancerRegistryEntry, MammogramImage and RegionOfInterest. Interpretations and
 history observations are mutable values stored on their entity. BreastSide,
-ProcedureIdentity, PatientAttributeObservation, PathologyObservation,
+ImagedLaterality, ProcedureIdentity, PatientAttributeObservation, PathologyObservation,
 ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values.
+
+`exam.imaged_laterality` says which breasts an exam imaged: an
+`ImagedLaterality` with `laterality` (LEFT, RIGHT, BILATERAL or UNKNOWN),
+`sides`, its `basis` (`ImagedLateralityBasis`) and the separate
+`description_laterality` and `image_laterality` it was derived from. No EMBED
+column records it, and finding sides are never used: they list breasts with a
+finding, not breasts imaged. The description is parsed for the words LEFT/LT,
+RIGHT/RT and BILATERAL/BILAT/BIL/BOTH; naming left and right means bilateral,
+and contradictory words are a conflict. Unilateral images contribute the sides
+they show. Agreeing sources give `DESCRIPTION_AND_IMAGES`; images showing fewer
+sides than a bilateral description keep it bilateral, because image metadata may
+be partial; any other disagreement is `CONFLICT` with UNKNOWN laterality.
+UNKNOWN never defaults to a side. It is computed on each access.
 
 ## Imaging and supplied association collections
 
