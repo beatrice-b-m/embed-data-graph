@@ -11,7 +11,7 @@ from embed_data_graph.clinical.histories import (
     PatientHistoryObservation,
     ProcedureHistoryObservation,
 )
-from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry
+from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry, UnresolvedClinicalRecord
 from embed_data_graph.core.entity import MutableEntity
 from embed_data_graph.core.graph import ensure_graph
 
@@ -101,6 +101,7 @@ class Patient(MutableEntity):
         for history in history_observations or ():
             self.add_history_observation(history)
         self._unkeyed_registry_entries: List[UnkeyedRegistryEntry] = []
+        self._unresolved_clinical: Dict[Any, List[UnresolvedClinicalRecord]] = {}
         self.set_unkeyed_registry_entries(unkeyed_registry_entries or ())
 
     def _coerce(self, name: str, value: Any) -> Any:
@@ -174,6 +175,39 @@ class Patient(MutableEntity):
             return ()
         named = graph._scoped_to(self.patient_id, "registry")
         return _unique([*named, *(entry for exam in self.exams for entry in exam.registry_entries)])
+
+    @property
+    def unresolved_clinical_records(self) -> Tuple[UnresolvedClinicalRecord, ...]:
+        """Procedure and pathology rows naming this patient whose identity is unresolved.
+
+        Records are grouped by the attachment they were loaded under (this
+        patient for a row without an accession, else its exam, finding or
+        procedure), in the order those attachments were first loaded. A record
+        whose side was not reported has UNKNOWN laterality. Each load replaces
+        the records of the attachments it addresses, as it does in
+        ``graph.unresolved_records``; this is the same data, typed and
+        selected by the patient each row names.
+
+        Examples
+        --------
+        >>> from embed_data_graph import load_embed
+        >>> graph = load_embed(pathology=[{"empi_anon": "P1", "acc_anon": "A1", "numfind": 1,
+        ...     "procdate_anon": "2020-01-02", "type": "B", "path_severity": 0}]).graph
+        >>> (record,) = graph.patient("P1").unresolved_clinical_records
+        >>> record.severity.name, record.laterality.value
+        ('INVASIVE_BREAST_CANCER', 'UNKNOWN')
+        """
+
+        return tuple(record for records in self._unresolved_clinical.values() for record in records)
+
+    def _set_unresolved_clinical(self, address: Any, records: Iterable[UnresolvedClinicalRecord]) -> None:
+        """Replace this patient's records at one unresolved-record address; used by loaders."""
+
+        stored = list(records)
+        if stored:
+            self._unresolved_clinical[address] = stored
+        else:
+            self._unresolved_clinical.pop(address, None)
 
     @property
     def unkeyed_registry_entries(self) -> Tuple[UnkeyedRegistryEntry, ...]:
@@ -455,6 +489,7 @@ class Patient(MutableEntity):
             "attribute_observations": self.attribute_observations,
             "history_observations": self.history_observations,
             "unkeyed_registry_entries": self.unkeyed_registry_entries,
+            "unresolved_clinical_records": self.unresolved_clinical_records,
             "metadata": self.metadata,
             "source": self.source,
         }
