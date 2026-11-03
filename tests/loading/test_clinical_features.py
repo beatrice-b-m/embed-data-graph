@@ -62,6 +62,23 @@ def test_finding_descriptors_keep_source_codes():
     assert finding.descriptors["calcification_number"].meaning is None
 
 
+def test_legacy_characteristic_flags_load_only_when_bound():
+    legacy = {"mass": "mass", "asymmetry": "asymmetry", "architectural_distortion": "arch_distortion", "calcification": "calc"}
+    flags = {"mass": 1, "asymmetry": 0, "arch_distortion": 1, "calc": 0}
+
+    unbound = load_embed(magview=[row(**flags)]).graph.finding("A1", "1")
+    bound = load_embed(magview=[row(**flags)], columns={"findings": legacy}).graph.finding("A1", "1")
+
+    assert unbound.descriptors == {}
+    assert {name: value.code for name, value in bound.descriptors.items()} == {
+        "mass": "1",
+        "asymmetry": "0",
+        "architectural_distortion": "1",
+        "calcification": "0",
+    }
+    assert bound.descriptors["mass"].meaning == "Represented"
+
+
 def test_descriptor_refresh_is_per_column():
     graph = load_embed(magview=[row(massshape="O", calcfind="A")]).graph
     load_embed(magview=[row(massshape=None)], into=graph)
