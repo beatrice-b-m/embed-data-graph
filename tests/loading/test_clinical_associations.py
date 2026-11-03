@@ -39,7 +39,7 @@ def test_registry_arrival_orders(order):
             load(graph, magview=[row(cancer_outcome_registry_id="7")] * 3)
             assert graph.exam("A").registry_references == {("P", "7")}
         else:
-            load(graph, registry=[{"empi_anon": "P", "cancer_registry_id": "7"}])
+            load(graph, registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7"}])
     assert graph.exam("A").registry_entries == (
         graph.registry_entry("P", "7"),
     )
@@ -48,7 +48,7 @@ def test_registry_arrival_orders(order):
 def test_registry_patient_scope_sharing_and_source_disagreement():
     graph = DatasetGraph()
     load(
-        graph, registry=[{"empi_anon": p, "cancer_registry_id": 7} for p in ("P", "Q")]
+        graph, registry=[{"empi_anon": p, "cancer_outcome_registry_id": 7} for p in ("P", "Q")]
     )
     load(
         graph,
@@ -170,7 +170,7 @@ def test_registry_payload_is_explicit_and_refreshes_only_bound_fields():
     graph = DatasetGraph()
     load(
         graph,
-        registry=[{"empi_anon": "P", "cancer_registry_id": "7", "secret": "unused"}],
+        registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7", "secret": "unused"}],
     )
     obj = graph.registry_entry("P", "7")
     assert dict(obj.payload) == {}
@@ -179,18 +179,18 @@ def test_registry_payload_is_explicit_and_refreshes_only_bound_fields():
     load(
         graph,
         columns=columns,
-        registry=[{"empi_anon": "P", "cancer_registry_id": "7", "dx": "supplied"}],
+        registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7", "dx": "supplied"}],
     )
     assert graph.registry_entry("P", "7") is obj
     assert obj.payload["diagnosis"] == "supplied"
     load(
-        graph, columns=columns, registry=[{"empi_anon": "P", "cancer_registry_id": "7"}]
+        graph, columns=columns, registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7"}]
     )
     assert obj.payload["diagnosis"] == "supplied"
     load(
         graph,
         columns=columns,
-        registry=[{"empi_anon": "P", "cancer_registry_id": "7", "dx": None}],
+        registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7", "dx": None}],
     )
     assert obj.payload["diagnosis"] is None
 
@@ -241,7 +241,7 @@ def test_registry_assignment_resolves_when_the_entry_arrives_later():
     exam = graph.register(Exam("A"))
     graph.set_registry_assignments(exam, [("P", "7")])
     assert graph.unresolved_references
-    load(graph, registry=[{"empi_anon": "P", "cancer_registry_id": "7"}])
+    load(graph, registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7"}])
     assert exam.registry_entries == (graph.registry_entry("P", "7"),)
     assert not graph.unresolved_references
 

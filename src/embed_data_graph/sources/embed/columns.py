@@ -164,7 +164,7 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
         "registry": MappingProxyType(
             {
                 "patient_id": "empi_anon",
-                "registry_id": "cancer_registry_id",
+                "registry_id": "cancer_outcome_registry_id",
                 "record_id": None,
                 "diagnosis": None,
                 "result_category": None,

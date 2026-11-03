@@ -33,7 +33,7 @@ def fixture(patient_count: int) -> Dict[str, list[dict[str, Any]]]:
             "ImageLateralityFinal": "L", "ViewPosition": "CC", "Modality": "MG",
             "Rows": 1000, "Columns": 1000, "ROI_coords": "[(1, 2, 10, 20), (1, 2, 10, 20)]",
         })
-        tables["registry"].append({"empi_anon": patient, "cancer_registry_id": 1})
+        tables["registry"].append({"empi_anon": patient, "cancer_outcome_registry_id": 1})
     return tables
 
 

@@ -112,7 +112,7 @@ def test_patient_scoped_tables_are_checked_by_patient_only():
             {"empi_anon": "P1", "acc_anon": "A-not-loaded", "type": "O", "code": "TAMOX"},
             {"empi_anon": "P2", "type": "O", "code": "TAMOX"},
         ],
-        registry=[{"empi_anon": "P1", "cancer_registry_id": 7}, {"empi_anon": "P2", "cancer_registry_id": 8}],
+        registry=[{"empi_anon": "P1", "cancer_outcome_registry_id": 7}, {"empi_anon": "P2", "cancer_outcome_registry_id": 8}],
         into=subset,
         parents="existing",
     )

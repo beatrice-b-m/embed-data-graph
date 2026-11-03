@@ -349,7 +349,7 @@ graph = load_embed(
             "linkedaccession_anon": "B-001",
         }
     ],
-    registry=[{"empi_anon": "P-001", "cancer_registry_id": 7}],
+    registry=[{"empi_anon": "P-001", "cancer_outcome_registry_id": 7}],
 ).graph
 
 exam = graph.exam("A-001")
