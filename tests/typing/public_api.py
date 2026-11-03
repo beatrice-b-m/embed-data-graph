@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 from typing_extensions import assert_type
 
 from embed_data_graph import (
-    DatasetGraph, Exam, Finding, Laterality, LoadReport,
+    DatasetGraph, Exam, Finding, ImagedLateralityBasis, Laterality, LoadReport,
     MammogramImage, Patient, Pathology, RegionOfInterest, load_embed,
 )
 from embed_data_graph.core.selection import Selection
@@ -51,3 +51,5 @@ research_roi = ResearchROI.from_embed_coordinates((0, 0, 9, 9), image_id="I", ro
 assert_type(research_roi, ResearchROI)
 assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
+assert_type(Exam("C").imaged_laterality.basis, ImagedLateralityBasis)
+assert_type(Exam("C").imaged_laterality.sides, Tuple[Laterality, ...])
