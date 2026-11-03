@@ -92,7 +92,23 @@ the same exam or breast side are separate facts; the core does not infer a
 finding-to-image or finding-to-ROI association from shared scope.
 
 Collections such as `patient.exams`, `exam.findings`, `image.rois`, and
-`exam.breast_sides` are computed on access from the graph's indexes. Use
+`exam.breast_sides` are computed on access from the graph's indexes.
+`exam.breast_sides` lists the sides that have a finding or image;
+`exam.imaged_laterality` instead says which breasts the exam imaged, derived
+from the exam description and image laterality, never from findings:
+
+```python
+from embed_data_graph import Exam, ImagedLateralityBasis, Laterality
+
+
+imaged = Exam("A-010", description="MG Diagnostic Left w/ Tomo").imaged_laterality
+assert imaged.sides == (Laterality.LEFT,)
+assert imaged.basis is ImagedLateralityBasis.EXAM_DESCRIPTION
+```
+
+When the description and images disagree, the laterality is UNKNOWN with basis
+`CONFLICT`, except that images of one side do not narrow a bilateral
+description, because image metadata may cover only part of an exam. Use
 `add_*`, `attach`, `detach`, `replace_rois`, or an update of the stored keys to
 change them. Changing a key (with `rekey`, `update` or plain assignment) is
 propagated to every object that stored the old key, after checking the whole
