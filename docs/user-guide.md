@@ -315,7 +315,7 @@ The supported default map is:
 | `pathology` | optional record ID, otherwise the procedure `(empi_anon, procdate_anon, type, bside)`; attachment `(acc_anon, numfind)`; procedure date `procdate_anon`; report date `pdate_anon`; severity `path_severity`; descriptors `path1` through `path10`; `diagnosis`, `result_category` and `malignant` unbound |
 | `hormone_history` | patient `empi_anon`; category/code `type`/`code`; accession `acc_anon`; timing `first_age`, `mfirst`, `yfirst`, `last_age`, `mlast`, `ylast` |
 | `procedure_history` | patient `empi_anon`; category/procedure `type`/`pcode`; accession `acc_anon`; laterality `side`; result `result` |
-| `registry` | required patient/entry identity `empi_anon`/`cancer_registry_id`; payload is unbound by default |
+| `registry` | patient/entry identity `empi_anon`/`cancer_outcome_registry_id` (a row without the entry ID is an unkeyed patient record); payload is unbound by default |
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
 `DEFAULT_COLUMNS` is the authoritative mapping object; the table above is a
@@ -349,7 +349,7 @@ graph = load_embed(
             "linkedaccession_anon": "B-001",
         }
     ],
-    registry=[{"empi_anon": "P-001", "cancer_registry_id": 7}],
+    registry=[{"empi_anon": "P-001", "cancer_outcome_registry_id": 7}],
 ).graph
 
 exam = graph.exam("A-001")
@@ -368,6 +368,32 @@ pass `merge=True` to union it. In source-table refresh, an absent or unbound
 association preserves the existing set, a null clears it, and a supplied set
 replaces it. A registry entry is patient-scoped and can be assigned to several
 exams. A registry ID by itself does not create a diagnosis.
+
+Every registry row is a registry record of its patient, including rows that no
+MagView pointer reaches and rows without a registry ID:
+
+```python
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    registry=[
+        {"empi_anon": "P-002", "cancer_outcome_registry_id": 3},
+        {"empi_anon": "P-002", "cancer_outcome_registry_id": None},
+    ],
+).graph
+
+patient = graph.patient("P-002")
+assert patient is not None
+assert patient.registry_entries == (graph.registry_entry("P-002", "3"),)
+assert len(patient.unkeyed_registry_entries) == 1
+```
+
+`patient.registry_entries` lists the keyed entries that name the patient
+whether or not an exam is assigned to them. Rows without a registry ID are
+`UnkeyedRegistryEntry` values in `patient.unkeyed_registry_entries`: no exam is
+assigned to them, and refresh replaces the patient's unkeyed records while merge
+preserves them.
 
 Verified `procedures` use the complete identity `(patient_id, performed_date,
 procedure_type, laterality)`. Incomplete records remain accessible through

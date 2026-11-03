@@ -5,6 +5,8 @@ together. A procedure is identified by patient, procedure date, type and biopsy
 side. Pathology is identified by an explicit record ID or by the procedure it
 belongs to. Rows that cannot establish an identity are kept as unresolved
 payload snapshots; no row position, payload hash or date becomes an identity.
+Registry rows with a patient but no registry ID are the patient's unkeyed
+registry snapshot.
 One call is one snapshot of every grain it addresses.
 """
 
@@ -16,7 +18,12 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Hashable, Iterable, List, Mapping, Optional, Set, Tuple
 
 from embed_data_graph.clinical.exams import Exam
-from embed_data_graph.clinical.pathology import CancerRegistryEntry, Pathology, PathologyObservation
+from embed_data_graph.clinical.pathology import (
+    CancerRegistryEntry,
+    Pathology,
+    PathologyObservation,
+    UnkeyedRegistryEntry,
+)
 from embed_data_graph.clinical.patients import Patient
 from embed_data_graph.clinical.procedures import Procedure
 from embed_data_graph.core.codes import Code
@@ -260,17 +267,32 @@ def _store_unresolved(state: _Snapshot) -> None:
 
 
 def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns: ColumnMap) -> None:
+    """Apply keyed registry entries and each addressed patient's unkeyed snapshot.
+
+    A row without a registry ID is still a registry record of its patient, so
+    it is kept as an unkeyed entry rather than dropped. Refresh replaces the
+    unkeyed snapshot of every patient the rows address, including with an
+    empty one once all of a patient's rows carry IDs; merge keeps the stored
+    snapshot because unkeyed records cannot be matched to it.
+    """
+
     grouped: Dict[Tuple[str, str], List[Mapping[str, Any]]] = defaultdict(list)
+    unkeyed: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
         patient_id = _id_at(row, columns.get("patient_id"))
-        registry_id = _id_at(row, columns.get("registry_id"))
-        if patient_id is None or registry_id is None:
+        if patient_id is None:
             state.issues.append(
-                Issue("incomplete_registry_identity", "Registry needs patient and entry IDs", context={"payload": dict(row)})
+                Issue("incomplete_registry_identity", "Registry needs a patient ID", context={"payload": dict(row)})
             )
             continue
-        grouped[(patient_id, registry_id)].append(row)
+        registry_id = _id_at(row, columns.get("registry_id"))
+        if registry_id is None:
+            unkeyed[patient_id].append(row)
+        else:
+            grouped[(patient_id, registry_id)].append(row)
+            unkeyed.setdefault(patient_id, [])
     payload_columns = {name: column for name, column in columns.items() if name not in {"patient_id", "registry_id"}}
+    _apply_unkeyed_registry(state, unkeyed, payload_columns)
     for key, group in grouped.items():
         payload, conflicts = _combine([(row, payload_columns) for row in group], state.issues, key)
         entity = state.graph.registry_entry(*key)
@@ -282,6 +304,44 @@ def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns
         if state.merge:
             reconcile_merge(current, updates, grain="registry", key=key, issues=state.issues)
         state.graph.update(entity, payload={**current, **updates})
+
+
+def _apply_unkeyed_registry(
+    state: _Snapshot, rows_by_patient: Mapping[str, List[Mapping[str, Any]]], payload_columns: ColumnMap
+) -> None:
+    loaded = 0
+    for patient_id, rows in rows_by_patient.items():
+        if state.merge:
+            if rows:
+                state.issues.append(
+                    Issue(
+                        "registry_merge_requires_registry_id",
+                        "Unkeyed registry merge requires registry IDs; stored records preserved",
+                        IssueSeverity.WARNING,
+                        context={"patient_id": patient_id, "rows": len(rows)},
+                    )
+                )
+            continue
+        patient = state.graph.patient(patient_id)
+        if patient is None:
+            if not rows:
+                continue
+            patient = state.graph.register(Patient(patient_id))
+        entries = []
+        for row in rows:
+            payload, _ = _combine([(row, payload_columns)], state.issues, (patient_id, None))
+            entries.append(UnkeyedRegistryEntry(payload))
+        patient.set_unkeyed_registry_entries(entries)
+        loaded += len(entries)
+    if loaded:
+        state.issues.append(
+            Issue(
+                "unkeyed_registry_entries",
+                "Registry rows without a registry ID were loaded as unkeyed patient records",
+                IssueSeverity.INFO,
+                context={"rows": loaded},
+            )
+        )
 
 
 def _apply_associations(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns: ColumnMap) -> None:
