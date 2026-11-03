@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
 
-from embed_data_graph.clinical.attributes import PatientAttributeObservation
+from embed_data_graph.clinical.attributes import AttributeResolution, AttributeStatus, PatientAttributeObservation
 from embed_data_graph.clinical.histories import (
     MedicationHistoryObservation,
     PatientHistoryObservation,
@@ -211,8 +211,9 @@ class Patient(MutableEntity):
         Any
             The value from the latest dated observation that reports a value.
             None when no dated observation qualifies or when observations on
-            that latest date disagree. Undated observations and explicit nulls
-            are ignored, so later information never leaks into an earlier date.
+            that latest date disagree; ``attribute_resolution`` tells the two
+            apart. Undated observations and explicit nulls are ignored, so
+            later information never leaks into an earlier date.
 
         Examples
         --------
@@ -224,6 +225,40 @@ class Patient(MutableEntity):
         'F'
         """
 
+        return self.attribute_resolution(attribute, as_of).value
+
+    def attribute_resolution(self, attribute: str, as_of: date) -> AttributeResolution:
+        """Return ``attribute`` as of ``as_of`` with the reason for its value.
+
+        Applies the same rule as ``attribute_as_of``, and tells absence from
+        conflict: the status is NOT_REPORTED when no dated observation on or
+        before ``as_of`` reports a value, and CONFLICT when the observations
+        on the latest qualifying date disagree.
+
+        Parameters
+        ----------
+        attribute : str
+            Attribute name, such as ``"menarche_age"``.
+        as_of : datetime.date
+            Inclusive cutoff compared with each observation's ``context_date``.
+
+        Returns
+        -------
+        AttributeResolution
+            Status, agreed value, latest qualifying date and its candidates.
+
+        Examples
+        --------
+        >>> patient = Patient("P1", attribute_observations=[
+        ...     PatientAttributeObservation("menarche_age", 12, "A1", date(2018, 1, 1)),
+        ...     PatientAttributeObservation("menarche_age", 12, "A2", date(2020, 1, 1)),
+        ...     PatientAttributeObservation("menarche_age", 13, "A3", date(2020, 1, 1)),
+        ... ])
+        >>> resolution = patient.attribute_resolution("menarche_age", date(2021, 1, 1))
+        >>> resolution.status.value, resolution.candidates
+        ('conflict', (12, 13))
+        """
+
         eligible = [
             item
             for item in self._attribute_observations
@@ -233,13 +268,15 @@ class Patient(MutableEntity):
             and item.context_date <= as_of
         ]
         if not eligible:
-            return None
+            return AttributeResolution(attribute, as_of, AttributeStatus.NOT_REPORTED)
         latest = max(_context_date(item) for item in eligible)
         values: List[Any] = []
         for item in eligible:
             if item.context_date == latest and item.value not in values:
                 values.append(item.value)
-        return values[0] if len(values) == 1 else None
+        if len(values) == 1:
+            return AttributeResolution(attribute, as_of, AttributeStatus.REPORTED, values[0], latest, tuple(values))
+        return AttributeResolution(attribute, as_of, AttributeStatus.CONFLICT, None, latest, tuple(values))
 
     # -- reported history ------------------------------------------------------
 
