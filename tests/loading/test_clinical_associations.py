@@ -292,3 +292,72 @@ def test_patient_registry_entries_follow_rekey_and_removal():
     graph.remove(entry)
     assert graph.patient("Q").registry_entries == ()
 
+
+def test_registry_rows_without_an_id_load_as_unkeyed_patient_records():
+    graph = DatasetGraph()
+    columns = {"registry": {"diagnosis": "dx"}}
+
+    issues = load(graph, columns=columns, registry=[registry_row(dx="first"), registry_row(dx="second"), registry_row("7")])
+
+    patient = graph.patient("P")
+    assert [entry.payload for entry in patient.unkeyed_registry_entries] == [{"diagnosis": "first"}, {"diagnosis": "second"}]
+    assert patient.registry_entries == (graph.registry_entry("P", "7"),)
+    assert len(graph.registry_entries) == 1
+    assert "incomplete_registry_identity" not in {issue.code for issue in issues}
+    (info,) = [issue for issue in issues if issue.code == "unkeyed_registry_entries"]
+    assert info.context["rows"] == 2
+
+
+def test_registry_rows_create_the_patient_that_owns_unkeyed_records():
+    graph = DatasetGraph()
+
+    load(graph, registry=[registry_row()])
+
+    assert len(graph.patient("P").unkeyed_registry_entries) == 1
+
+
+def test_registry_rows_without_a_patient_are_still_rejected():
+    graph = DatasetGraph()
+
+    issues = load(graph, registry=[{"empi_anon": None, "cancer_outcome_registry_id": None}])
+
+    assert graph.patients == () and graph.registry_entries == ()
+    assert "incomplete_registry_identity" in {issue.code for issue in issues}
+
+
+def test_refresh_replaces_each_addressed_patients_unkeyed_snapshot():
+    graph = DatasetGraph()
+    columns = {"registry": {"diagnosis": "dx"}}
+    load(graph, columns=columns, registry=[registry_row(dx="old"), {"empi_anon": "Q", "cancer_outcome_registry_id": None}])
+
+    load(graph, columns=columns, registry=[registry_row(dx="new")])
+    assert [entry.payload["diagnosis"] for entry in graph.patient("P").unkeyed_registry_entries] == ["new"]
+    assert len(graph.patient("Q").unkeyed_registry_entries) == 1
+
+    # Once a patient's rows all carry IDs, the stale unkeyed records go.
+    load(graph, columns=columns, registry=[registry_row("7", dx="new")])
+    assert graph.patient("P").unkeyed_registry_entries == ()
+
+
+def test_merge_preserves_unkeyed_records_and_reports_the_rows():
+    graph = DatasetGraph()
+    load(graph, registry=[registry_row()])
+    stored = graph.patient("P").unkeyed_registry_entries
+
+    issues = load(graph, mode="merge", registry=[registry_row(), registry_row("7")])
+
+    assert graph.patient("P").unkeyed_registry_entries == stored
+    assert graph.registry_entry("P", "7") is not None
+    (warning,) = [issue for issue in issues if issue.code == "registry_merge_requires_registry_id"]
+    assert warning.context == {"patient_id": "P", "rows": 1}
+
+
+def test_unkeyed_registry_records_travel_with_patient_partitions_and_export():
+    graph = DatasetGraph()
+    load(graph, registry=[registry_row()])
+
+    part = graph.partition(level="patient", key=lambda patient: patient.patient_id)["P"]
+
+    copied = part.patient("P").unkeyed_registry_entries
+    assert len(copied) == 1 and copied[0] is not graph.patient("P").unkeyed_registry_entries[0]
+    assert part.to_dict()["patient"][0]["unkeyed_registry_entries"] == [{"payload": {}, "source": None}]
