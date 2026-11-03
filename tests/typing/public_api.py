@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 from typing_extensions import assert_type
 
 from embed_data_graph import (
+    DbtForm, ViewModification, ViewPosition,
     DatasetGraph, Exam, Finding, Laterality, LoadReport,
     MammogramImage, Patient, Pathology, RegionOfInterest, load_embed,
 )
@@ -51,3 +52,7 @@ research_roi = ResearchROI.from_embed_coordinates((0, 0, 9, 9), image_id="I", ro
 assert_type(research_roi, ResearchROI)
 assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
+assert_type(MammogramImage("I").dbt_form, Optional[DbtForm])
+assert_type(MammogramImage("I").view_modification, ViewModification)
+assert_type(MammogramImage("I").recovered_view_position, ViewPosition)
+assert_type(MammogramImage("I", spot_magnification=True).spot_magnification, Optional[bool])
