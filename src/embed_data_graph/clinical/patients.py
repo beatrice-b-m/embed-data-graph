@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, 
 
 from embed_data_graph.clinical.attributes import AttributeResolution, AttributeStatus, PatientAttributeObservation
 from embed_data_graph.clinical.histories import (
+    CancerHistoryObservation,
     MedicationHistoryObservation,
     PatientHistoryObservation,
     ProcedureHistoryObservation,
@@ -298,6 +299,12 @@ class Patient(MutableEntity):
 
         return tuple(item for item in self._history_observations if isinstance(item, ProcedureHistoryObservation))
 
+    @property
+    def cancer_history(self) -> Tuple[CancerHistoryObservation, ...]:
+        """Reported cancer history about the patient or a relative; see ``about_relative``."""
+
+        return tuple(item for item in self._history_observations if isinstance(item, CancerHistoryObservation))
+
     def history_known_on(self, observation: PatientHistoryObservation) -> Optional[date]:
         """Return the date a reported history fact was known, or None.
 
@@ -334,7 +341,7 @@ class Patient(MutableEntity):
         ----------
         as_of : datetime.date
             Inclusive cutoff compared with ``history_known_on``.
-        kind : type, {"medication", "procedure"} or None, optional
+        kind : type, {"medication", "procedure", "cancer"} or None, optional
             Only this kind of history; None (default) returns every kind.
 
         Returns
@@ -464,7 +471,7 @@ class Patient(MutableEntity):
 
         Parameters
         ----------
-        kind : type or {"medication", "procedure"}
+        kind : type or {"medication", "procedure", "cancer"}
             History class, or its short name.
         items : iterable of PatientHistoryObservation
             Replacement observations of that kind; empty clears it.
@@ -515,13 +522,17 @@ def _context_date(item: PatientAttributeObservation) -> date:
 
 def _history_type(kind: Union[Type[PatientHistoryObservation], str]) -> Type[PatientHistoryObservation]:
     if isinstance(kind, str):
-        names = {"medication": MedicationHistoryObservation, "procedure": ProcedureHistoryObservation}
+        names = {
+            "medication": MedicationHistoryObservation,
+            "procedure": ProcedureHistoryObservation,
+            "cancer": CancerHistoryObservation,
+        }
         if kind.lower() not in names:
-            raise TypeError("history kind must be 'medication', 'procedure' or a history class")
+            raise TypeError("history kind must be 'medication', 'procedure', 'cancer' or a history class")
         return names[kind.lower()]
     if isinstance(kind, type) and issubclass(kind, PatientHistoryObservation):
         return kind
-    raise TypeError("history kind must be 'medication', 'procedure' or a history class")
+    raise TypeError("history kind must be 'medication', 'procedure', 'cancer' or a history class")
 
 
 def _same_record(left: PatientHistoryObservation, right: PatientHistoryObservation) -> bool:
