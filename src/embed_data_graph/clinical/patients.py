@@ -185,6 +185,43 @@ class Patient(MutableEntity):
         self._attribute_observations.append(observation)
         return observation
 
+    def replace_attribute_history(
+        self, attribute: str, observations: Iterable[PatientAttributeObservation]
+    ) -> Tuple[PatientAttributeObservation, ...]:
+        """Replace every observation of one attribute and keep the others.
+
+        Parameters
+        ----------
+        attribute : str
+            Attribute whose observations are replaced.
+        observations : iterable of PatientAttributeObservation
+            The complete replacement; empty clears the attribute. Observations
+            sharing a context replace one another, last wins.
+
+        Returns
+        -------
+        tuple of PatientAttributeObservation
+            The stored observations of ``attribute`` in insertion order.
+
+        Raises
+        ------
+        TypeError
+            A value is not a PatientAttributeObservation.
+        ValueError
+            A value is an observation of another attribute. Nothing changes
+            in either case.
+        """
+
+        replacement = list(observations)
+        if any(not isinstance(item, PatientAttributeObservation) for item in replacement):
+            raise TypeError("observations must be PatientAttributeObservation values")
+        if any(item.attribute != attribute for item in replacement):
+            raise ValueError("every observation must be of the replaced attribute")
+        self._attribute_observations = [item for item in self._attribute_observations if item.attribute != attribute]
+        for item in replacement:
+            self.add_attribute_observation(item)
+        return tuple(item for item in self._attribute_observations if item.attribute == attribute)
+
     def attribute_history(self, attribute: str) -> Tuple[PatientAttributeObservation, ...]:
         """Return the observations of one attribute, dated ones first by date.
 
