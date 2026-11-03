@@ -153,6 +153,20 @@ attachment the adapter could establish, never keyed by a row position. When rows
 of one procedure disagree on a descriptor slot, the bundle is unresolved because
 only a record ID could tell the reports apart. Within an addressed attachment's
 refresh, unresolved snapshots replace earlier ones; no replay ledger accumulates.
+A pathology row also addresses its own exam or finding, so a corrected row that
+now resolves clears what an earlier incomplete row left there.
+
+Each unresolved entry carries a typed `record`, an `UnresolvedClinicalRecord`
+with the reported patient, procedure date, type and side, and for pathology the
+severity, raw severity, report date and descriptor slots. Missing parts stay
+missing: an unreported procedure side is `Laterality.UNKNOWN` and is never taken
+from the finding side. A row without an accession is kept under
+`("patient", patient_id)` rather than unattached. `patient.unresolved_clinical_records`
+lists the records whose rows name the patient, so a cancer result on a
+procedure without a side, date or type is reachable from the patient, with its
+`incomplete_procedure_identity` or `incomplete_pathology_identity` issue naming
+the patient. `patient.procedures` and `patient.pathology` likewise include
+resolved procedures and bundles that name the patient but no exam reaches.
 
 `path_severity` loads as `PathologySeverity`, an inverse scale on which 0 is
 invasive breast cancer and 5 non-breast cancer; code 6 is invalid and kept only

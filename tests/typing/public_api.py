@@ -5,7 +5,7 @@ from typing_extensions import assert_type
 from embed_data_graph import (
     DatasetGraph, Exam, Finding, Laterality, LoadReport,
     CancerRegistryEntry, MammogramImage, Patient, Pathology, RegionOfInterest,
-    UnkeyedRegistryEntry, load_embed,
+    UnkeyedRegistryEntry, UnresolvedClinicalRecord, load_embed,
 )
 from embed_data_graph.core.selection import Selection
 
@@ -58,3 +58,5 @@ assert_type(
     Patient("P").set_unkeyed_registry_entries([UnkeyedRegistryEntry({"site": "C50"})]),
     Tuple[UnkeyedRegistryEntry, ...],
 )
+assert_type(Patient("P").unresolved_clinical_records, Tuple[UnresolvedClinicalRecord, ...])
+assert_type(Patient("P").procedures[0].identity.laterality, Laterality)
