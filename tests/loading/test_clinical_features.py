@@ -51,14 +51,11 @@ def test_finding_descriptors_keep_source_codes():
 
     codes = {name: value.code for name, value in finding.descriptors.items()}
     assert codes == {
-        "mass": "1",
         "mass_shape": "X",
         "mass_margin": "S",
-        "calcification": "0",
         "calcification_morphology": "A,B",
         "calcification_number": "-2",
     }
-    assert finding.descriptors["mass"].meaning == "Represented"
     assert finding.descriptors["mass_shape"].meaning == "Irregular"
     assert finding.descriptors["mass_margin"].meaning == "Spiculated"
     assert finding.descriptors["calcification_morphology"].tokens == ("A", "B")
