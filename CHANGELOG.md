@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Exam.imaged_laterality`, returning `ImagedLaterality` with its
+  `ImagedLateralityBasis`, both exported at the root. It says which breasts an
+  exam imaged (LEFT, RIGHT, BILATERAL or UNKNOWN) from the exam description
+  and the laterality of its images, never from findings, and keeps each
+  source's own answer. `Exam.breast_sides` is unchanged: it lists sides with a
+  finding or image, which is not the set of breasts imaged.
+
 ## 0.3.1 — 2026-10-21
 
 Source release `v0.3.1`. This patch release fixes image identity: image and ROI
