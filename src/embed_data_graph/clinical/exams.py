@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
 from embed_data_graph.core.codes import Code
@@ -46,6 +48,125 @@ class BreastSide:
     """Findings on this side."""
     images: Tuple["MammogramImage", ...] = ()
     """Images of this side."""
+
+
+class ImagedLateralityBasis(str, Enum):
+    """What an exam's imaged laterality was derived from.
+
+    Members
+    -------
+    EXAM_DESCRIPTION='exam_description'
+        Only the exam description established it.
+    IMAGE_LATERALITY='image_laterality'
+        Only the laterality of the exam's images established it.
+    DESCRIPTION_AND_IMAGES='description_and_images'
+        Both established it and agree.
+    CONFLICT='conflict'
+        They disagree, or the description names contradictory sides, so the
+        laterality is UNKNOWN.
+    NONE='none'
+        Neither established anything, so the laterality is UNKNOWN.
+    """
+
+    EXAM_DESCRIPTION = "exam_description"
+    IMAGE_LATERALITY = "image_laterality"
+    DESCRIPTION_AND_IMAGES = "description_and_images"
+    CONFLICT = "conflict"
+    NONE = "none"
+
+
+@dataclass(frozen=True)
+class ImagedLaterality:
+    """Which breasts an exam imaged, with what that was derived from.
+
+    No EMBED column records the imaged breasts. Finding sides list breasts with
+    a finding, not breasts imaged, so findings are never used. The exam
+    description is parsed best-effort for left, right and bilateral words, and
+    the images contribute the unilateral sides they show. Image metadata may
+    cover only part of an exam, so images showing fewer sides than a bilateral
+    description do not contradict it; images showing a side the description
+    excludes do. UNKNOWN never defaults to a side.
+
+    Attributes
+    ----------
+    laterality : Laterality
+        LEFT, RIGHT, BILATERAL or UNKNOWN.
+    basis : ImagedLateralityBasis
+        What established ``laterality``.
+    description_laterality : Laterality
+        What the exam description alone says; UNKNOWN when it names no side
+        or names conflicting ones.
+    image_laterality : Laterality
+        What the unilateral images alone show; UNKNOWN without such images.
+
+    Examples
+    --------
+    >>> Exam("A1", description="MG Diagnostic Left w/ Tomo").imaged_laterality.laterality
+    <Laterality.LEFT: 'L'>
+    """
+
+    laterality: Laterality
+    """LEFT, RIGHT, BILATERAL or UNKNOWN."""
+    basis: ImagedLateralityBasis
+    """What established the laterality."""
+    description_laterality: Laterality = Laterality.UNKNOWN
+    """What the exam description alone says."""
+    image_laterality: Laterality = Laterality.UNKNOWN
+    """What the unilateral images alone show."""
+
+    @property
+    def sides(self) -> Tuple[Laterality, ...]:
+        """The imaged breasts as (LEFT, RIGHT), (LEFT,), (RIGHT,) or () when unknown."""
+
+        return self.laterality.expand()
+
+
+_SIDE_WORDS = {
+    "LEFT": Laterality.LEFT,
+    "LT": Laterality.LEFT,
+    "RIGHT": Laterality.RIGHT,
+    "RT": Laterality.RIGHT,
+    "BILATERAL": Laterality.BILATERAL,
+    "BILAT": Laterality.BILATERAL,
+    "BIL": Laterality.BILATERAL,
+    "BOTH": Laterality.BILATERAL,
+}
+
+
+def _description_laterality(description: Optional[str]) -> Tuple[Laterality, bool]:
+    """Return the side the description names and whether its side words conflict."""
+
+    words = {_SIDE_WORDS[word] for word in re.findall(r"[A-Z]+", (description or "").upper()) if word in _SIDE_WORDS}
+    if words == {Laterality.LEFT, Laterality.RIGHT}:
+        return Laterality.BILATERAL, False
+    if len(words) > 1:
+        return Laterality.UNKNOWN, True
+    return (words.pop() if words else Laterality.UNKNOWN), False
+
+
+def _image_laterality(images: Iterable["MammogramImage"]) -> Laterality:
+    sides = {image.laterality for image in images if image.laterality.is_unilateral}
+    if sides == {Laterality.LEFT, Laterality.RIGHT}:
+        return Laterality.BILATERAL
+    return sides.pop() if sides else Laterality.UNKNOWN
+
+
+def _imaged_laterality(description: Optional[str], images: Iterable["MammogramImage"]) -> ImagedLaterality:
+    (described, contradictory), shown = _description_laterality(description), _image_laterality(images)
+    if contradictory:
+        return ImagedLaterality(Laterality.UNKNOWN, ImagedLateralityBasis.CONFLICT, described, shown)
+    if described is Laterality.UNKNOWN and shown is Laterality.UNKNOWN:
+        return ImagedLaterality(Laterality.UNKNOWN, ImagedLateralityBasis.NONE)
+    if shown is Laterality.UNKNOWN:
+        return ImagedLaterality(described, ImagedLateralityBasis.EXAM_DESCRIPTION, described, shown)
+    if described is Laterality.UNKNOWN:
+        return ImagedLaterality(shown, ImagedLateralityBasis.IMAGE_LATERALITY, described, shown)
+    if described is shown:
+        return ImagedLaterality(described, ImagedLateralityBasis.DESCRIPTION_AND_IMAGES, described, shown)
+    if described is Laterality.BILATERAL:
+        # Images of one side only may be partial metadata of a bilateral exam.
+        return ImagedLaterality(described, ImagedLateralityBasis.EXAM_DESCRIPTION, described, shown)
+    return ImagedLaterality(Laterality.UNKNOWN, ImagedLateralityBasis.CONFLICT, described, shown)
 
 
 class Exam(MutableEntity):
@@ -275,6 +396,18 @@ class Exam(MutableEntity):
 
         graph = self.graph
         return graph.linked_exams(self) if graph is not None else ()
+
+    @property
+    def imaged_laterality(self) -> ImagedLaterality:
+        """Which breasts this exam imaged, derived on each access.
+
+        Derived from the description and the laterality of the images
+        currently attached, never from findings; see ``ImagedLaterality``
+        for the rules. Unlike ``breast_sides``, a finding-free imaged breast
+        is included and a finding does not make a breast imaged.
+        """
+
+        return _imaged_laterality(self.description, self.images)
 
     @property
     def breast_sides(self) -> Mapping[Laterality, BreastSide]:

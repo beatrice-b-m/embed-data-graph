@@ -19,7 +19,7 @@ Examples
 
 from importlib.metadata import version
 
-from embed_data_graph.clinical.exams import BreastSide, Exam
+from embed_data_graph.clinical.exams import BreastSide, Exam, ImagedLaterality, ImagedLateralityBasis
 from embed_data_graph.clinical.findings import Finding
 from embed_data_graph.clinical.patients import Patient
 from embed_data_graph.clinical.procedures import Procedure, ProcedureIdentity
@@ -39,6 +39,8 @@ __all__ = [
     "Box",
     "DatasetGraph",
     "Exam",
+    "ImagedLaterality",
+    "ImagedLateralityBasis",
     "Finding",
     "Issue",
     "LoadReport",
