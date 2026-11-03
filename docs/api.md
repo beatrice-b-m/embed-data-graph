@@ -169,6 +169,16 @@ value that was never reported (`NOT_REPORTED`) from one whose latest qualifying
 reports disagree (`CONFLICT`), with that date and its `candidates`. Neither falls
 back to an earlier agreeing value; reduce `attribute_history` for that.
 
+`cancer_history` rows load as `CancerHistoryObservation` values
+(`embed_data_graph.clinical.histories`) with the same snapshot, record-ID and
+merge rules as the other history tables, read through `patient.cancer_history`
+or the history kind `"cancer"`. The subject flag decodes to `about_relative`
+(1 is the patient, 0 a relative; another value is None with an
+`unknown_cancer_history_subject` warning). Relationship, category and cancer
+codes are uppercased source codes without meanings; side, bilateral,
+premenopausal, age, month, year, BRCA and comment fields are raw text and are
+never decoded as results.
+
 Reported history is captured at the intake of its context exam, so
 `Patient.history_known_on(observation)` is the context exam's date, looked up
 on each call so exams may load before or after the history.
