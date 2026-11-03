@@ -546,7 +546,15 @@ def _load_patients(
     undated correction replaces that observation instead of adding another.
     """
 
-    converters = {"sex": text, "race": text, "ethnicity": text, "birth_year": _birth_year_value}
+    converters = {
+        "sex": text,
+        "race": text,
+        "ethnicity": text,
+        "birth_year": _birth_year_value,
+        "menarche_age": _number,
+        "menopause_age": _number,
+        "live_births": _number,
+    }
     groups = _group_rows(rows, columns, ("patient_id",), "patient", issues)
     for key in sorted(groups, key=repr):
         patient = _ensure_patient(graph, key)
@@ -585,7 +593,9 @@ def _load_patients(
                 )
                 touched.add(attribute)
         scalars = {}
-        for attribute in sorted(touched):
+        # Intake answers such as menarche age vary over time by design; only
+        # the declared stable attributes get a scalar on the patient.
+        for attribute in sorted(touched & _PATIENT_SCALARS):
             values: list[Any] = []
             for item in patient.attribute_observations:
                 if item.attribute == attribute and item.value is not None and item.value not in values:
@@ -594,6 +604,8 @@ def _load_patients(
         if scalars:
             graph.update(patient, **scalars)
 
+
+_PATIENT_SCALARS = frozenset({"sex", "race", "ethnicity", "birth_year"})
 
 def _load_exams(
     rows: Sequence[_InputRow],
@@ -618,6 +630,7 @@ def _load_exams(
                 "visit_type": _decoder(vocabulary.VISIT_TYPE),
                 "modality": _decoder(vocabulary.EXAM_MODALITY),
                 "patient_age": _number,
+                "location_id": identifier,
             },
             "exam",
             key,

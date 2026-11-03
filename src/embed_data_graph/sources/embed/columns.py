@@ -6,6 +6,8 @@ or V1c image-metadata tables; semantic fields without such a column default to
 None and can be bound explicitly through ``columns``.
 In particular, registry payload fields and future image identity fields remain
 explicitly configurable instead of being guessed from similarly named columns.
+MagView ``height`` and ``weight`` are unreliable and mostly missing, so they
+are not bound; the dated body-measurement table is the canonical source.
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "race": "race",
                 "ethnicity": "ethnicity",
                 "birth_year": None,
+                "menarche_age": "menarcheage_anon",
+                "menopause_age": "menopauseage_anon",
+                "live_births": "livebirths",
             }
         ),
         "exams": MappingProxyType(
@@ -41,6 +46,7 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "visit_type": "vtype",
                 "modality": "modality_desc",
                 "patient_age": "age_at_study_anon",
+                "location_id": "loc_num_anon",
             }
         ),
         "findings": MappingProxyType(
