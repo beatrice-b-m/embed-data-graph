@@ -254,3 +254,41 @@ def test_procedure_before_finding_resolves_and_exam_fallback_is_supported():
     assert graph.finding("A", "1").procedures[0] is graph.procedures[0]
     load(graph, procedures=[clinical_row(numfind=None, procdate_anon="2021-01-01")])
     assert len(graph.exam("A").procedures) == 2
+
+
+def registry_row(registry_id=None, **fields):
+    return {"empi_anon": "P", "cancer_outcome_registry_id": registry_id, **fields}
+
+
+def test_registry_identity_defaults_to_the_magview_pointer_column():
+    graph = DatasetGraph()
+    load(graph, magview=[row(cancer_outcome_registry_id="7")], registry=[registry_row("7")])
+
+    assert graph.exam("A").registry_entries == (graph.registry_entry("P", "7"),)
+
+
+def test_patient_registry_entries_include_entries_no_exam_is_assigned_to():
+    graph = DatasetGraph()
+    load(graph, magview=[row(cancer_outcome_registry_id="7")], registry=[registry_row("7"), registry_row("8")])
+
+    patient = graph.patient("P")
+
+    assert patient.registry_entries == (graph.registry_entry("P", "7"), graph.registry_entry("P", "8"))
+    assert graph.registry_entry("P", "8").exams == ()
+    assert Patient("P").registry_entries == ()
+
+
+def test_patient_registry_entries_follow_rekey_and_removal():
+    graph = DatasetGraph()
+    graph.register(Patient("P"))
+    load(graph, registry=[registry_row("7")])
+    entry = graph.registry_entry("P", "7")
+    assert graph.patient("P").registry_entries == (entry,)
+
+    entry.rekey(patient_id="Q")
+    assert graph.patient("P").registry_entries == ()
+    assert graph.register(Patient("Q")).registry_entries == (entry,)
+
+    graph.remove(entry)
+    assert graph.patient("Q").registry_entries == ()
+
