@@ -4,6 +4,13 @@
 
 ### Added
 
+- `UnresolvedClinicalRecord`, exported at the root, and
+  `Patient.unresolved_clinical_records`. A procedure or pathology row that
+  cannot resolve its identity (a missing side, date or type, or disagreeing
+  pathology) now also carries a typed `record` in `graph.unresolved_records`,
+  and the patient its row names reaches it. The record keeps what the row
+  reported; an unreported procedure side is `UNKNOWN` and is never taken from
+  the finding side. The identity issue's context now includes `patient_id`.
 - `UnkeyedRegistryEntry`, exported at the root, and
   `Patient.unkeyed_registry_entries` / `Patient.set_unkeyed_registry_entries`.
   A registry row with a patient but no registry ID now loads as an unkeyed
@@ -15,6 +22,15 @@
 
 ### Changed
 
+- `Patient.procedures` and `Patient.pathology` now include procedures and
+  bundles whose identity names the patient but that no exam reaches, ahead of
+  those reached through exams.
+- An unresolved procedure or pathology row without an accession is kept under
+  `("clinical", kind, ("patient", patient_id))` instead of under a single
+  unattached address shared by all patients, so a refresh replaces it per
+  patient. A pathology row now also addresses its exam or finding when it
+  resolves, so a corrected row clears the stale unresolved record an earlier
+  incomplete row left there.
 - The default `registry` `registry_id` binding is now
   `cancer_outcome_registry_id`, the column name in the internal registry file
   and in the MagView assignment pointer. Previously it was
