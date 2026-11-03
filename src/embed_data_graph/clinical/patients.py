@@ -11,6 +11,7 @@ from embed_data_graph.clinical.histories import (
     PatientHistoryObservation,
     ProcedureHistoryObservation,
 )
+from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry
 from embed_data_graph.core.entity import MutableEntity
 from embed_data_graph.core.graph import ensure_graph
 
@@ -44,11 +45,14 @@ class Patient(MutableEntity):
         Consumer metadata, copied into a dict.
     source : SourceRef or None, optional
         Row the patient was read from.
+    unkeyed_registry_entries : iterable of UnkeyedRegistryEntry, optional
+        Registry records of this patient that have no registry ID.
 
     Notes
     -----
     ``exams`` are the registered exams whose owner is this patient; a patient
-    without a graph has none.
+    without a graph has none. The patient's complete registry record is
+    ``registry_entries`` together with ``unkeyed_registry_entries``.
     """
 
     kind = "patient"
@@ -80,6 +84,7 @@ class Patient(MutableEntity):
         history_observations: Optional[Iterable[PatientHistoryObservation]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
+        unkeyed_registry_entries: Optional[Iterable[UnkeyedRegistryEntry]] = None,
     ) -> None:
         super().__init__()
         self.patient_id = patient_id
@@ -95,6 +100,8 @@ class Patient(MutableEntity):
             self.add_attribute_observation(observation)
         for history in history_observations or ():
             self.add_history_observation(history)
+        self._unkeyed_registry_entries: List[UnkeyedRegistryEntry] = []
+        self.set_unkeyed_registry_entries(unkeyed_registry_entries or ())
 
     def _coerce(self, name: str, value: Any) -> Any:
         if name == "patient_id":
@@ -148,6 +155,43 @@ class Patient(MutableEntity):
             return ()
         named = graph._scoped_to(self.patient_id, "registry")
         return _unique([*named, *(entry for exam in self.exams for entry in exam.registry_entries)])
+
+    @property
+    def unkeyed_registry_entries(self) -> Tuple[UnkeyedRegistryEntry, ...]:
+        """Registry records of this patient without a registry ID, in stored order.
+
+        They are the latest snapshot loaded for this patient. No exam is
+        assigned to them and none is the same record as a keyed entry.
+        """
+
+        return tuple(self._unkeyed_registry_entries)
+
+    def set_unkeyed_registry_entries(
+        self, entries: Iterable[UnkeyedRegistryEntry]
+    ) -> Tuple[UnkeyedRegistryEntry, ...]:
+        """Replace the unkeyed registry snapshot and return the stored records.
+
+        Parameters
+        ----------
+        entries : iterable of UnkeyedRegistryEntry
+            The complete replacement, stored in the given order; empty clears it.
+
+        Returns
+        -------
+        tuple of UnkeyedRegistryEntry
+            The stored records, the same objects that were passed.
+
+        Raises
+        ------
+        TypeError
+            A value is not an UnkeyedRegistryEntry. Nothing changes then.
+        """
+
+        replacement = list(entries)
+        if any(not isinstance(item, UnkeyedRegistryEntry) for item in replacement):
+            raise TypeError("unkeyed registry entries must be UnkeyedRegistryEntry values")
+        self._unkeyed_registry_entries = replacement
+        return tuple(replacement)
 
     def add_exam(self, exam: "Exam") -> "Exam":
         """Make this patient the exam's owner and source claim; return the exam.
@@ -391,6 +435,7 @@ class Patient(MutableEntity):
             "ethnicity": self.ethnicity,
             "attribute_observations": self.attribute_observations,
             "history_observations": self.history_observations,
+            "unkeyed_registry_entries": self.unkeyed_registry_entries,
             "metadata": self.metadata,
             "source": self.source,
         }
