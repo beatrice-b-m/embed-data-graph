@@ -23,7 +23,9 @@ Linked exams and registry assignments preserve source-supplied relationships.
 A registry entry is patient-scoped and may be assigned to multiple exams; a
 patient reaches its entries whether or not any exam is assigned to them. A
 registry row without a registry ID is kept as an unkeyed record of its patient,
-never matched to a keyed entry or given an inferred identity. Missing
+never matched to a keyed entry or given an inferred identity. Registry fields
+are kept as reported: an unspecified side is unknown rather than dropped, and
+no severity or outcome is derived from histology, stage or receptors. Missing
 endpoints remain inspectable references and resolve when their objects arrive.
 The adapter preserves assignments without rerunning matching or inferring diagnoses.
 

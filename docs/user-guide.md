@@ -315,13 +315,15 @@ The supported default map is:
 | `pathology` | optional record ID, otherwise the procedure `(empi_anon, procdate_anon, type, bside)`; attachment `(acc_anon, numfind)`; procedure date `procdate_anon`; report date `pdate_anon`; severity `path_severity`; descriptors `path1` through `path10`; `diagnosis`, `result_category` and `malignant` unbound |
 | `hormone_history` | patient `empi_anon`; category/code `type`/`code`; accession `acc_anon`; timing `first_age`, `mfirst`, `yfirst`, `last_age`, `mlast`, `ylast` |
 | `procedure_history` | patient `empi_anon`; category/procedure `type`/`pcode`; accession `acc_anon`; laterality `side`; result `result` |
-| `registry` | patient/entry identity `empi_anon`/`cancer_outcome_registry_id` (a row without the entry ID is an unkeyed patient record); payload is unbound by default |
+| `registry` | patient/entry identity `empi_anon`/`cancer_outcome_registry_id` (a row without the entry ID is an unkeyed patient record); payload `DATE_OF_DIAGNOSIS_ANON`, `LATERALITY`, `HISTOLOGY_ICDO3`, `BEHAVIOR_ICDO3`, `PRIMARY_SITE`, `T_Stage`, `N_Stage`, `M_Stage`, `STAGE_GRP`, `ESTROGEN_RECEPTOR`, `PROGESTERONE_RECEPTOR`, `HER2`, `VITAL_STATUS`, read through typed entry properties |
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
 `DEFAULT_COLUMNS` is the authoritative mapping object; the table above is a
-quick reference. The registry identity binding is deliberately narrower than
-the rest of its possible payload. Map additional registry payload fields only
-when their source meanings are established.
+quick reference. Registry entries read their payload through typed
+properties such as `entry.laterality`, `entry.icdo3` and `entry.her2`; registry
+laterality codes 3, 5 and 9 load as an UNKNOWN side rather than being dropped.
+Map additional registry payload fields only when their source meanings are
+established.
 
 ## Clinical relationships
 

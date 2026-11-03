@@ -4,6 +4,14 @@
 
 ### Added
 
+- Registry payload bindings for the internal registry file:
+  `DATE_OF_DIAGNOSIS_ANON`, `LATERALITY`, `HISTOLOGY_ICDO3`, `BEHAVIOR_ICDO3`,
+  `PRIMARY_SITE`, `T_Stage`, `N_Stage`, `M_Stage`, `STAGE_GRP`,
+  `ESTROGEN_RECEPTOR`, `PROGESTERONE_RECEPTOR`, `HER2` and `VITAL_STATUS`, read
+  through typed properties on `CancerRegistryEntry` and `UnkeyedRegistryEntry`
+  (`diagnosis_date`, `laterality`, `icdo3`, `primary_site`, stages, receptors,
+  `vital_status`). Registry laterality codes 0, 3, 5 and 9 load as an UNKNOWN
+  side rather than being dropped; receptors keep their source codes.
 - `UnkeyedRegistryEntry`, exported at the root, and
   `Patient.unkeyed_registry_entries` / `Patient.set_unkeyed_registry_entries`.
   A registry row with a patient but no registry ID now loads as an unkeyed

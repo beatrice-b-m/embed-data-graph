@@ -8,6 +8,7 @@ from typing import Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Tuple
 
 from embed_data_graph.core.codes import Code
 from embed_data_graph.core.entity import MutableEntity, Reference, plain_value
+from embed_data_graph.core.primitives import Laterality
 from embed_data_graph.core.source import SourceRef, optional_source
 
 
@@ -260,7 +261,153 @@ class Pathology(MutableEntity):
         }
 
 
-class CancerRegistryEntry(MutableEntity):
+_REGISTRY_SIDES = {1: Laterality.RIGHT, 2: Laterality.LEFT, 4: Laterality.BILATERAL}
+
+
+class RegistryFacts:
+    """Typed views of the registry fields an entry's ``payload`` holds.
+
+    The properties read the mapped payload on each access, so they follow the
+    loader's refresh, merge and conflict rules, and are None (or UNKNOWN) when
+    a field is unbound, missing or conflicting. Codes are kept as reported;
+    no severity, stage ordering or outcome is inferred.
+    """
+
+    payload: Dict[str, Any]
+
+    @property
+    def diagnosis_date(self) -> Optional[str]:
+        """Registry diagnosis date as ISO text, or None.
+
+        Day-precise but sometimes the cancer surgery date rather than an
+        earlier positive biopsy, so it can fall after the first pathology
+        evidence; keep its registry source with it.
+        """
+
+        value = self.payload.get("diagnosis_date")
+        if value is None:
+            return None
+        isoformat = getattr(value, "isoformat", None)
+        text = isoformat() if callable(isoformat) else str(value)
+        return text.strip()[:10] or None
+
+    @property
+    def laterality(self) -> Laterality:
+        """Tumor side from the registry laterality code.
+
+        Codes 1, 2 and 4 are right, left and bilateral. Every other code
+        (0 not paired, 3 one side unspecified, 5 midline, 9 unknown) and a
+        missing value are UNKNOWN; the code itself is ``source_laterality``.
+        """
+
+        code = _whole(self.payload.get("laterality"))
+        return _REGISTRY_SIDES.get(code, Laterality.UNKNOWN) if code is not None else Laterality.UNKNOWN
+
+    @property
+    def source_laterality(self) -> Optional[str]:
+        """Registry laterality code as reported."""
+
+        return _code_text(self.payload.get("laterality"))
+
+    @property
+    def histology(self) -> Optional[str]:
+        """ICD-O-3 histology code, such as ``"8500"``."""
+
+        return _code_text(self.payload.get("histology"))
+
+    @property
+    def behavior(self) -> Optional[str]:
+        """ICD-O-3 behavior code, such as ``"3"``."""
+
+        return _code_text(self.payload.get("behavior"))
+
+    @property
+    def icdo3(self) -> Optional[str]:
+        """``histology/behavior`` when both are reported, such as ``"8500/3"``."""
+
+        if self.histology is None or self.behavior is None:
+            return None
+        return f"{self.histology}/{self.behavior}"
+
+    @property
+    def primary_site(self) -> Optional[str]:
+        """ICD-O-3 primary site code, such as ``"C504"``."""
+
+        return _code_text(self.payload.get("primary_site"))
+
+    @property
+    def t_stage(self) -> Optional[str]:
+        """Reported T stage as text."""
+
+        return _code_text(self.payload.get("t_stage"))
+
+    @property
+    def n_stage(self) -> Optional[str]:
+        """Reported N stage as text."""
+
+        return _code_text(self.payload.get("n_stage"))
+
+    @property
+    def m_stage(self) -> Optional[str]:
+        """Reported M stage as text."""
+
+        return _code_text(self.payload.get("m_stage"))
+
+    @property
+    def stage_group(self) -> Optional[str]:
+        """Reported stage group as text."""
+
+        return _code_text(self.payload.get("stage_group"))
+
+    @property
+    def estrogen_receptor(self) -> Optional[Code]:
+        """Registry ER code without a meaning (0 negative, 1 positive, 7 ordered, 9 unavailable)."""
+
+        return Code.coerce(_code_text(self.payload.get("estrogen_receptor")))
+
+    @property
+    def progesterone_receptor(self) -> Optional[Code]:
+        """Registry PR code without a meaning, on the ER code scale."""
+
+        return Code.coerce(_code_text(self.payload.get("progesterone_receptor")))
+
+    @property
+    def her2(self) -> Optional[Code]:
+        """Registry HER2 code without a meaning (0 negative or equivocal; 30 unresolved)."""
+
+        return Code.coerce(_code_text(self.payload.get("her2")))
+
+    @property
+    def vital_status(self) -> Optional[str]:
+        """Reported vital status code as text."""
+
+        return _code_text(self.payload.get("vital_status"))
+
+
+def _whole(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else None
+
+
+def _code_text(value: Any) -> Optional[str]:
+    """Return a reported code as text; whole floats such as 8500.0 read as ``"8500"``."""
+
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value != value:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    text = str(value).strip()
+    return text or None
+
+
+class CancerRegistryEntry(RegistryFacts, MutableEntity):
     """A patient-scoped cancer-registry record that exams can be assigned to.
 
     The registry ID is meaningful only together with the patient ID. It is a
@@ -344,7 +491,7 @@ class CancerRegistryEntry(MutableEntity):
 
 
 @dataclass
-class UnkeyedRegistryEntry:
+class UnkeyedRegistryEntry(RegistryFacts):
     """A patient's cancer-registry record that has no registry ID.
 
     Registry rows without a registry ID are real registry records, but no
