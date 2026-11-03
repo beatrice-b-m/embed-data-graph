@@ -319,6 +319,7 @@ The supported default map is:
 | `pathology` | optional record ID, otherwise the procedure `(empi_anon, procdate_anon, type, bside)`; attachment `(acc_anon, numfind)`; procedure date `procdate_anon`; report date `pdate_anon`; severity `path_severity`; descriptors `path1` through `path10`; `diagnosis`, `result_category` and `malignant` unbound |
 | `hormone_history` | patient `empi_anon`; category/code `type`/`code`; accession `acc_anon`; timing `first_age`, `mfirst`, `yfirst`, `last_age`, `mlast`, `ylast` |
 | `procedure_history` | patient `empi_anon`; category/procedure `type`/`pcode`; accession `acc_anon`; laterality `side`; result `result` |
+| `cancer_history` | patient `empi_anon`; accession `acc_anon`; subject `patient` (1 patient, 0 relative); relationship `rel`; category/code `type`/`cancercode` (source codes, no meanings); raw text `side`, `bilat`, `premen`, `diag_age`, `month`, `year`, `curr_age`, `brca1`, `brca2`, `comment` |
 | `registry` | required patient/entry identity `empi_anon`/`cancer_registry_id`; payload is unbound by default |
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
@@ -382,7 +383,12 @@ ambiguous or insufficient key remains unresolved. Descriptor slots retain
 order and duplicate values. A report date is not substituted for the procedure
 date or a diagnosis event date.
 
-`hormone_history` and `procedure_history` are patient-owned reported facts.
+`hormone_history`, `procedure_history` and `cancer_history` are patient-owned
+reported facts. `cancer_history` entries (`patient.cancer_history`) record
+whether they are about the patient or a relative (`about_relative`); relative
+history is never the patient's own diagnosis. Their relationship, category and
+cancer codes keep source codes without meanings, because those dictionaries
+are provisional, and BRCA, side and timing fields stay raw text.
 They are distinct from performed procedures. Their category, code and result
 are `Code` values, and a code is decoded within its category, so `O` under
 hormone `H` reads "Other hormone" but under contraceptive `O` reads "Other

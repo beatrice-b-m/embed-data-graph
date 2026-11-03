@@ -53,6 +53,8 @@ an attribute, never identity. Pathology without a complete procedure or record I
 and procedure pathology whose descriptor slots disagree across rows, remain
 unresolved records.
 Unkeyed histories are patient-scoped reported facts, without inferred event identity.
+Cancer history about a relative is never the patient's own diagnosis or
+genetic result, and no reported history entry is a verified diagnosis.
 A reported fact is known as of its context exam's date; one without a resolvable
 context exam date has no as-of date and is never treated as known earlier.
 

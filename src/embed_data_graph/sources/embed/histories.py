@@ -6,6 +6,7 @@ from math import isfinite
 from typing import Any, Mapping, Optional
 
 from embed_data_graph.clinical.histories import (
+    CancerHistoryObservation,
     HistoryTimeEstimate,
     MedicationHistoryObservation,
     ProcedureHistoryObservation,
@@ -13,7 +14,7 @@ from embed_data_graph.clinical.histories import (
 from embed_data_graph.core.primitives import Laterality
 from embed_data_graph.core.source import Issue, IssueSeverity, SourceRef
 from embed_data_graph.core.codes import Code, Vocabulary
-from embed_data_graph.sources.embed._values import cell, code, text
+from embed_data_graph.sources.embed._values import cell, code, text, whole_number
 from embed_data_graph.sources.embed.vocabulary import (
     BREAST_PROCEDURE,
     CONTRACEPTIVE,
@@ -177,6 +178,74 @@ def normalize_procedure_history(
         reported_result=result,
     )
     return observation, tuple(issues)
+
+
+def normalize_cancer_history(
+    row: Mapping[str, Any],
+    columns: Mapping[str, Optional[str]],
+    source: Optional[SourceRef],
+    record_id: Optional[str] = None,
+) -> tuple[CancerHistoryObservation, tuple[Issue, ...]]:
+    """Normalize one reported cancer-history row about the patient or a relative.
+
+    Parameters
+    ----------
+    row : mapping
+        Source column names to raw values; not mutated.
+    columns : mapping
+        Semantic field names to physical columns; None bindings omit fields.
+        Use the matching map from resolve_columns for EMBED defaults.
+    source : SourceRef or None
+        Physical diagnostic provenance, not clinical identity.
+    record_id : str or None, optional
+        Explicit patient-scoped record ID; None (default) is an unkeyed snapshot.
+
+    Returns
+    -------
+    CancerHistoryObservation, tuple of Issue
+        The reported entry and diagnostics. The subject flag 1 is the patient
+        and 0 a relative; another value leaves ``about_relative`` None with an
+        ``unknown_cancer_history_subject`` warning. Relationship, category and
+        cancer codes are uppercased source codes without meanings, because the
+        catalog's dictionaries for them are provisional or not code lists.
+        Every other field is raw text.
+
+    Notes
+    -----
+    No graph is mutated, no files are read and no scientific validity is inferred.
+    """
+
+    issues: list[Issue] = []
+    subject = _upper(row, columns.get("subject"))
+    flag = whole_number(cell(row, columns.get("subject")))
+    about_relative = {1: False, 0: True}.get(flag) if flag is not None else None
+    if subject and about_relative is None:
+        issues.append(
+            Issue(
+                code="unknown_cancer_history_subject",
+                message="cancer-history subject is neither 1 (patient) nor 0 (relative)",
+                severity=IssueSeverity.WARNING,
+                source=source,
+                context={"value": subject},
+            )
+        )
+    observation = CancerHistoryObservation(
+        source=source,
+        record_id=_record_id(row, columns, record_id),
+        about_relative=about_relative,
+        relationship=Code.coerce(_upper(row, columns.get("relationship")) or None),
+        category=Code.coerce(_upper(row, columns.get("category")) or None),
+        cancer_code=Code.coerce(_upper(row, columns.get("cancer_code")) or None),
+        context_accession=_text(row, columns.get("accession")),
+        **{name: _text(row, columns.get(name)) for name in _CANCER_TEXT_COLUMNS},
+    )
+    return observation, tuple(issues)
+
+
+_CANCER_TEXT_COLUMNS = (
+    "side", "bilateral", "premenopausal", "diagnosis_age", "diagnosis_month", "diagnosis_year",
+    "current_age", "brca1", "brca2", "comment",
+)
 
 
 def _decode_pair(
