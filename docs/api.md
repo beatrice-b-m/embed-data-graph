@@ -188,6 +188,30 @@ An update or rekey that would give two original images the same source SOP raise
 ValueError before changing fields or source indexes. The check uses the proposed
 UID and derivation state together, including a derivative becoming an original.
 
+Image rows also load `manufacturer` (`Manufacturer`), `series_description`
+(`SeriesDescription`), `dicom_image_type` (`ImageType`, serialized as recorded),
+`view_modifier` (the first view-modifier code meaning) and `spot_magnification`
+(`spot_mag`: 1 is True and 0 False; anything else is None with an
+`image_flag_parse` issue; None is not a negative determination). The supplied
+view text is kept, trimmed and uppercased, as `source_view_position`; coercion to
+`view_position` is unchanged and a null `ImageLateralityFinal` still loads as
+UNKNOWN. Three properties are derived on access:
+
+- `dbt_form` is `DbtForm.PROJECTION` or `RECONSTRUCTION` for a DBT image when
+  the series-description words or ImageType tokens name exactly one form (for
+  example `Tomosynthesis Projection` or `TOMO_PROJ`), else `UNKNOWN`; it is None
+  for images that are not DBT. Wording differs by manufacturer, so `UNKNOWN` is
+  expected.
+- `view_modification` is `ViewModification.MODIFIED` when the spot flag is True,
+  a view modifier is represented, or the view text has words besides the base
+  view and side (`SPOT CC`); otherwise `STANDARD` for a known view and
+  `UNKNOWN` for an unknown one. A modified view never counts as standard CC or
+  MLO coverage.
+- `recovered_laterality` and `recovered_view_position` return the tag value,
+  or, when no tag value was supplied, the single side or view named by the
+  series description. A populated tag is never overridden and a parse failure
+  stays UNKNOWN; `laterality` and `view_position` themselves are unchanged.
+
 Image metadata automatically projects ROI collections. Missing/null ROI input
 preserves; explicit `[]` clears; malformed/conflicting input preserves with an issue.
 Explicit `rois` input overrides automatic projection for addressed images. Both
