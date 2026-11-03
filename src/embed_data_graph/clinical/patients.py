@@ -298,6 +298,81 @@ class Patient(MutableEntity):
 
         return tuple(item for item in self._history_observations if isinstance(item, ProcedureHistoryObservation))
 
+    def history_known_on(self, observation: PatientHistoryObservation) -> Optional[date]:
+        """Return the date a reported history fact was known, or None.
+
+        Reported history is captured at the intake of the exam it came with,
+        so a fact was known on its context exam's date. That exam is looked up
+        on each call, so it may be loaded before or after the history. The
+        result is None when the observation has no context accession, the
+        exam is not in the graph, it belongs to or is claimed by another
+        patient, or it has no ISO exam date. It is not when the reported event
+        happened.
+
+        Examples
+        --------
+        >>> from embed_data_graph import load_embed
+        >>> graph = load_embed(
+        ...     exams=[{"acc_anon": "A1", "empi_anon": "P1", "studydate_anon": "2020-03-04"}],
+        ...     hormone_history=[{"empi_anon": "P1", "acc_anon": "A1", "type": "H", "code": "TAMOX"}],
+        ... ).graph
+        >>> patient = graph.patient("P1")
+        >>> patient.history_known_on(patient.medication_history[0])
+        datetime.date(2020, 3, 4)
+        """
+
+        return self._history_anchor(observation)[0]
+
+    def history_as_of(
+        self,
+        as_of: date,
+        kind: Union[Type[PatientHistoryObservation], str, None] = None,
+    ) -> Tuple[PatientHistoryObservation, ...]:
+        """Return the reported history known on or before ``as_of``, in stored order.
+
+        Parameters
+        ----------
+        as_of : datetime.date
+            Inclusive cutoff compared with ``history_known_on``.
+        kind : type, {"medication", "procedure"} or None, optional
+            Only this kind of history; None (default) returns every kind.
+
+        Returns
+        -------
+        tuple of PatientHistoryObservation
+            Facts whose context exam date is on or before ``as_of``. Facts
+            without a resolvable date are excluded, so later information never
+            leaks into an earlier date.
+        """
+
+        selected = PatientHistoryObservation if kind is None else _history_type(kind)
+        result = []
+        for item in self._history_observations:
+            known = self.history_known_on(item) if isinstance(item, selected) else None
+            if known is not None and known <= as_of:
+                result.append(item)
+        return tuple(result)
+
+    def _history_anchor(self, observation: PatientHistoryObservation) -> Tuple[Optional[date], Optional[str]]:
+        """Return the known-on date of a history fact, or None and why not."""
+
+        accession = getattr(observation, "context_accession", None)
+        if accession is None:
+            return None, "missing_context_accession"
+        graph = self.graph
+        exam = graph.exam(accession) if graph is not None else None
+        if exam is None:
+            return None, "context_exam_not_loaded"
+        owned = exam.patient_id == self.patient_id or (
+            exam.patient_id is None and exam.asserted_patient_ids <= {self.patient_id}
+        )
+        if not owned:
+            return None, "context_exam_ownership_ambiguous"
+        day = _iso_day(exam.exam_date)
+        if day is None:
+            return None, "context_exam_without_date"
+        return day, None
+
     def add_history_observation(self, observation: PatientHistoryObservation) -> PatientHistoryObservation:
         """Add a reported fact, or update the stored record with the same record ID.
 
@@ -420,6 +495,17 @@ class Patient(MutableEntity):
             "metadata": self.metadata,
             "source": self.source,
         }
+
+
+def _iso_day(value: Optional[str]) -> Optional[date]:
+    """Return the date of an ISO ``YYYY-MM-DD`` text, ignoring any time part."""
+
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value).strip()[:10])
+    except ValueError:
+        return None
 
 
 def _context_date(item: PatientAttributeObservation) -> date:
