@@ -397,7 +397,29 @@ preserves them.
 
 Verified `procedures` use the complete identity `(patient_id, performed_date,
 procedure_type, laterality)`. Incomplete records remain accessible through
-`graph.unresolved_records` rather than becoming one procedure per physical row.
+`graph.unresolved_records` rather than becoming one procedure per physical row,
+and the patient their row names reaches them as typed records:
+
+```python
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    magview=[
+        {
+            "empi_anon": "P-003", "acc_anon": "A-003", "numfind": 1, "side": "L",
+            "procdate_anon": "2021-04-02", "type": "B", "bside": None,
+            "path_severity": 0,
+        }
+    ],
+).graph
+
+patient = graph.patient("P-003")
+assert patient is not None
+(pathology,) = [r for r in patient.unresolved_clinical_records if r.kind == "pathology"]
+assert pathology.severity is not None and pathology.severity.name == "INVASIVE_BREAST_CANCER"
+assert pathology.laterality.value == "UNKNOWN"  # never the finding side
+```
 Pathology prefers a supplied patient-scoped record ID. Without one, the
 documented attachment plus report-documentation-date fallback is used; an
 ambiguous or insufficient key remains unresolved. Descriptor slots retain
