@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `UnkeyedRegistryEntry`, exported at the root, and
+  `Patient.unkeyed_registry_entries` / `Patient.set_unkeyed_registry_entries`.
+  A registry row with a patient but no registry ID now loads as an unkeyed
+  record of that patient, reported once per call by the INFO issue
+  `unkeyed_registry_entries`. Refresh replaces the unkeyed records of each
+  patient the rows address; merge preserves them and reports
+  `registry_merge_requires_registry_id`. Unkeyed records travel with patient
+  partitions and appear in `graph.to_dict()` under each patient.
+
+### Changed
+
+- The default `registry` `registry_id` binding is now
+  `cancer_outcome_registry_id`, the column name in the internal registry file
+  and in the MagView assignment pointer. Previously it was
+  `cancer_registry_id`, which matched no registry column. Inputs that still use
+  `cancer_registry_id` can pass `columns={"registry": {"registry_id":
+  "cancer_registry_id"}}`.
+- Registry rows without a registry ID are no longer dropped with
+  `incomplete_registry_identity`; that issue now means the row has no patient.
+- `Patient.registry_entries` now includes the patient's entries that no exam
+  is assigned to, ahead of entries reached through its exams. Previously only
+  exam-assigned entries were returned, so a patient-scoped search missed
+  registry diagnoses never linked to an imaging accession.
+
 ## 0.3.1 — 2026-10-21
 
 Source release `v0.3.1`. This patch release fixes image identity: image and ROI
