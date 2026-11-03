@@ -28,7 +28,8 @@ the consumer's environment specification and qualification notes.
 The root facade is the preferred import boundary for common types:
 `DatasetGraph`, `Patient`, `Exam`, `Finding`, `Procedure`, `ProcedureIdentity`,
 `Pathology`, `CancerRegistryEntry`, `MammogramImage`, `RegionOfInterest`, `Box`,
-`Laterality`, `ImageModality`, `ViewPosition`, `load_embed`, `validate`,
+`Laterality`, `ImageModality`, `ViewPosition`, `ViewModification`, `DbtForm`,
+`load_embed`, `validate`,
 `ValidationResult`, `Issue`, `SourceRef`, and `LoadReport`.
 
 Use specialist modules for mappings and types outside the root exports:
