@@ -118,6 +118,11 @@ something that stays are deep-copied at the boundary. Linked exams are
 associations, not containment; keys crossing the boundary stay unresolved until
 their targets are present.
 
+Image laterality and view are the source tags; a side or view parsed from the
+series description is exposed separately as recovered, never written over a
+populated tag. Projection-or-reconstruction form and view modification are
+derived values with an unknown state.
+
 Selections are live, non-owning views. Partitions are independent graphs of deep
 copies: the selected entities, what they contain, and their ancestors as context.
 A selected patient brings its patient-scoped entities as `pop` does. A link that

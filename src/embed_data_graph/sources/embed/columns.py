@@ -88,6 +88,11 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "study_instance_uid": None,
                 "series_instance_uid": None,
                 "coordinate_frame_id": None,
+                "manufacturer": "Manufacturer",
+                "series_description": "SeriesDescription",
+                "dicom_image_type": "ImageType",
+                "view_modifier": "0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning",
+                "spot_magnification": "spot_mag",
             }
         ),
         "rois": MappingProxyType(

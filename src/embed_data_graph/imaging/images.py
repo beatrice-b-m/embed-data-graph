@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable, Mapping, Optional, Set, Tuple, TYPE_CHECKING
 
 from embed_data_graph.core.entity import MutableEntity, Reference
 from embed_data_graph.core.graph import ensure_graph
 from embed_data_graph.core.primitives import (
+    DbtForm,
     ImageModality,
     Laterality,
     PatientOrientation,
+    ViewModification,
     ViewPosition,
 )
 from embed_data_graph.imaging.landmarks import BreastGeometry, ImageLandmark
@@ -82,6 +85,25 @@ class MammogramImage(MutableEntity):
     metadata : Optional[Mapping[str, Any]], optional
         Consumer metadata, shallow-copied into a mutable dict. Nested values
         remain shared. Default: None.
+    manufacturer : Optional[str], optional
+        Acquisition device manufacturer as recorded; None means absent.
+        Default: None.
+    series_description : Optional[str], optional
+        Free-text series description written by the modality; not a
+        controlled vocabulary. Default: None.
+    dicom_image_type : Optional[str], optional
+        Serialized source DICOM ImageType value, kept as recorded. Default:
+        None.
+    view_modifier : Optional[str], optional
+        Source view-modifier code meaning, such as a spot or magnification
+        modifier; None means none is represented. Default: None.
+    spot_magnification : Optional[bool], optional
+        Derived spot-compression or magnification flag. Only True is a
+        determination; None is not a negative one. Default: None.
+    source_view_position : Optional[str], optional
+        The view-position text as supplied, trimmed and uppercased, before
+        coercion to ``view_position``; None when no view tag was supplied.
+        Default: None.
 
     Notes
     -----
@@ -152,6 +174,18 @@ class MammogramImage(MutableEntity):
     """Consumer metadata, shallow-copied into a mutable dict. Nested values remain
     shared. Default: None.
     """
+    manufacturer: Optional[str]
+    """Acquisition device manufacturer as recorded; None means absent."""
+    series_description: Optional[str]
+    """Free-text series description written by the modality."""
+    dicom_image_type: Optional[str]
+    """Serialized source DICOM ImageType value, as recorded."""
+    view_modifier: Optional[str]
+    """Source view-modifier code meaning; None means none is represented."""
+    spot_magnification: Optional[bool]
+    """Derived spot or magnification flag; None is not a negative determination."""
+    source_view_position: Optional[str]
+    """View-position text as supplied, trimmed and uppercased; None when absent."""
 
     kind = "image"
     __key_fields__ = ("image_id",)
@@ -181,6 +215,12 @@ class MammogramImage(MutableEntity):
         coordinate_frame_id: Optional[str] = None,
         landmarks: Iterable[ImageLandmark] = (),
         metadata: Optional[Mapping[str, Any]] = None,
+        manufacturer: Optional[str] = None,
+        series_description: Optional[str] = None,
+        dicom_image_type: Optional[str] = None,
+        view_modifier: Optional[str] = None,
+        spot_magnification: Optional[bool] = None,
+        source_view_position: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.image_id = image_id
@@ -203,6 +243,12 @@ class MammogramImage(MutableEntity):
         self.coordinate_frame_id = coordinate_frame_id
         self.landmarks = tuple(landmarks)
         self.metadata = dict(metadata or {})
+        self.manufacturer = manufacturer
+        self.series_description = series_description
+        self.dicom_image_type = dicom_image_type
+        self.view_modifier = view_modifier
+        self.spot_magnification = spot_magnification
+        self.source_view_position = source_view_position
 
     def _coerce(self, name: str, value: Any) -> Any:
         if name == "image_id":
@@ -224,6 +270,10 @@ class MammogramImage(MutableEntity):
             return landmarks
         elif name == "metadata":
             return dict(value or {})
+        elif name == "spot_magnification" and value is not None and not isinstance(value, bool):
+            raise TypeError("spot_magnification must be a bool or None")
+        elif name == "source_view_position" and value is not None:
+            return str(value).strip().upper() or None
         return value
 
     def _source_aliases(self, overrides: Mapping[str, Any]) -> Iterable[Tuple[str, Any, bool]]:
@@ -297,6 +347,94 @@ class MammogramImage(MutableEntity):
 
         return self.modality is ImageModality.DBT
 
+    @property
+    def dbt_form(self) -> Optional[DbtForm]:
+        """Projection or reconstruction for a DBT image; None for other images.
+
+        Read from words in ``series_description`` (PROJ, PROJECTION; RECON,
+        RECONSTRUCTION, RECONSTRUCTED, SLICES, VOLUME) and in the tokens of
+        ``dicom_image_type`` (such as TOMO_PROJ). When exactly one form is
+        named, that is the form; naming both, or the two sources disagreeing,
+        is UNKNOWN. Hologic projections always name a projection in their
+        series description, so a Hologic DBT image whose series description
+        names neither form, such as ``L MLO Breast Tomosynthesis Image``, is a
+        RECONSTRUCTION. Other manufacturers word their series differently, so
+        theirs stay UNKNOWN unless a form is named, as does an image without a
+        series description.
+
+        Examples
+        --------
+        >>> MammogramImage("I", modality="3D", series_description="L CC Tomosynthesis Projection").dbt_form
+        <DbtForm.PROJECTION: 'PROJECTION'>
+        >>> MammogramImage("I", modality="3D", manufacturer="HOLOGIC, Inc.",
+        ...                series_description="L MLO Breast Tomosynthesis Image").dbt_form
+        <DbtForm.RECONSTRUCTION: 'RECONSTRUCTION'>
+        """
+
+        if not self.is_dbt:
+            return None
+        words = set(_words(self.series_description)) | set(_words(self.dicom_image_type))
+        projection, reconstruction = bool(words & _PROJECTION_WORDS), bool(words & _RECONSTRUCTION_WORDS)
+        if projection or reconstruction:
+            if projection and reconstruction:
+                return DbtForm.UNKNOWN
+            return DbtForm.PROJECTION if projection else DbtForm.RECONSTRUCTION
+        hologic = (self.manufacturer or "").strip().upper().startswith("HOLOGIC")
+        return DbtForm.RECONSTRUCTION if hologic and self.series_description else DbtForm.UNKNOWN
+
+    @property
+    def view_modification(self) -> ViewModification:
+        """Whether this image's view is a standard or a modified acquisition.
+
+        MODIFIED when ``spot_magnification`` is True, a ``view_modifier`` is
+        represented, or ``source_view_position`` carries words besides the base
+        view and side (such as ``SPOT CC``). Otherwise UNKNOWN when the view is
+        unknown and STANDARD when it is known. STANDARD means no modification is
+        represented; the spot flag records only affirmative determinations.
+        A modified view is never standard CC or MLO coverage.
+        """
+
+        modifier = (self.view_modifier or "").strip()
+        if self.spot_magnification is True or modifier:
+            return ViewModification.MODIFIED
+        extra = [
+            word
+            for word in _words(self.source_view_position)
+            if word not in _VIEW_WORDS and word not in _SIDE_WORDS and not _SIDE_VIEW.fullmatch(word)
+        ]
+        if extra:
+            return ViewModification.MODIFIED
+        if self.view_position is ViewPosition.UNKNOWN:
+            return ViewModification.UNKNOWN
+        return ViewModification.STANDARD
+
+    @property
+    def recovered_laterality(self) -> Laterality:
+        """``laterality``, or when it is UNKNOWN the side parsed from ``series_description``.
+
+        A value parsed from the series description is recovered, not recorded:
+        it is used only when the laterality tag gave none, and a description
+        naming no side, or both sides, leaves it UNKNOWN. ``laterality`` itself
+        is never changed.
+        """
+
+        if self.laterality is not Laterality.UNKNOWN:
+            return self.laterality
+        return _series_side_and_view(self.series_description)[0]
+
+    @property
+    def recovered_view_position(self) -> ViewPosition:
+        """``view_position``, or when no view tag was supplied the view parsed from ``series_description``.
+
+        A populated view tag is never overridden, even when it did not coerce to
+        a known view; a description naming no view, or several, leaves it
+        UNKNOWN. ``view_position`` itself is never changed.
+        """
+
+        if self.view_position is not ViewPosition.UNKNOWN or self.source_view_position is not None:
+            return self.view_position
+        return _series_side_and_view(self.series_description)[1]
+
     def breast_geometry(
         self,
         *,
@@ -353,8 +491,45 @@ class MammogramImage(MutableEntity):
             ),
             "coordinate_frame_id": self.coordinate_frame_id,
             "landmarks": self.landmarks,
+            "manufacturer": self.manufacturer,
+            "series_description": self.series_description,
+            "dicom_image_type": self.dicom_image_type,
+            "view_modifier": self.view_modifier,
+            "spot_magnification": self.spot_magnification,
+            "source_view_position": self.source_view_position,
             "metadata": self.metadata,
         }
+
+
+_VIEW_WORDS = frozenset(member.value for member in ViewPosition if member is not ViewPosition.UNKNOWN)
+_SIDE_WORDS = {"L": Laterality.LEFT, "LT": Laterality.LEFT, "LEFT": Laterality.LEFT,
+               "R": Laterality.RIGHT, "RT": Laterality.RIGHT, "RIGHT": Laterality.RIGHT}
+_PROJECTION_WORDS = frozenset({"PROJ", "PROJECTION", "PROJECTIONS"})
+_RECONSTRUCTION_WORDS = frozenset({"RECON", "RECONSTRUCTION", "RECONSTRUCTIONS", "RECONSTRUCTED", "SLICE", "SLICES", "VOLUME"})
+_SIDE_VIEW = re.compile(r"(L|R)(XCCL|MLO|CC|ML|LM)")
+
+
+def _words(text: Optional[str]) -> Tuple[str, ...]:
+    return tuple(re.findall(r"[A-Z0-9]+", (text or "").upper()))
+
+
+def _series_side_and_view(text: Optional[str]) -> Tuple[Laterality, ViewPosition]:
+    """Best-effort side and view named by a series description; UNKNOWN unless exactly one."""
+
+    sides: Set[Laterality] = set()
+    views: Set[ViewPosition] = set()
+    for word in _words(text):
+        joined = _SIDE_VIEW.fullmatch(word)
+        if word in _SIDE_WORDS:
+            sides.add(_SIDE_WORDS[word])
+        elif word in _VIEW_WORDS:
+            views.add(ViewPosition(word))
+        elif joined:
+            sides.add(_SIDE_WORDS[joined.group(1)])
+            views.add(ViewPosition(joined.group(2)))
+    side = sides.pop() if len(sides) == 1 else Laterality.UNKNOWN
+    view = views.pop() if len(views) == 1 else ViewPosition.UNKNOWN
+    return side, view
 
 
 def _require_image_id(image_id: str) -> None:
