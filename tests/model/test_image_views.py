@@ -25,6 +25,22 @@ def test_dbt_form_comes_only_from_explicit_wording(fields, expected):
     assert dbt(**fields).dbt_form is expected
 
 
+@pytest.mark.parametrize(
+    ("fields", "expected"),
+    [
+        ({"manufacturer": "HOLOGIC, Inc.", "series_description": "L MLO Breast Tomosynthesis Image"}, DbtForm.RECONSTRUCTION),
+        ({"manufacturer": "hologic", "series_description": "R CC Tomo"}, DbtForm.RECONSTRUCTION),
+        ({"manufacturer": "HOLOGIC, Inc.", "series_description": "L CC Tomosynthesis Projection"}, DbtForm.PROJECTION),
+        ({"manufacturer": "HOLOGIC, Inc.", "series_description": "Projection and Reconstruction"}, DbtForm.UNKNOWN),
+        ({"manufacturer": "HOLOGIC, Inc.", "dicom_image_type": "ORIGINAL\\PRIMARY"}, DbtForm.UNKNOWN),
+        ({"manufacturer": "GE MEDICAL SYSTEMS", "series_description": "L MLO Breast Tomosynthesis Image"}, DbtForm.UNKNOWN),
+        ({"series_description": "L MLO Breast Tomosynthesis Image"}, DbtForm.UNKNOWN),
+    ],
+)
+def test_hologic_series_naming_no_form_are_reconstructions(fields, expected):
+    assert dbt(**fields).dbt_form is expected
+
+
 def test_dbt_form_is_none_for_images_that_are_not_dbt():
     assert MammogramImage("I", modality="2D", series_description="Projection").dbt_form is None
 

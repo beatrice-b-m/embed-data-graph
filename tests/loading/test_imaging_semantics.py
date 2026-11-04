@@ -1,6 +1,6 @@
 """EMBED image-metadata semantics honoured by the loader."""
 
-from embed_data_graph import ImageModality, load_embed
+from embed_data_graph import DbtForm, ImageModality, load_embed
 
 
 def image_row(**fields):
@@ -68,7 +68,10 @@ def test_dbt_projections_and_reconstructions_can_be_told_apart():
     unknown = loaded(FinalImageType="3D", Manufacturer="GE MEDICAL SYSTEMS", SeriesDescription="RMLO", ImageType="ORIGINAL\\PRIMARY")
     flat = loaded(FinalImageType="2D", SeriesDescription="L CC")
 
+    untagged = loaded(FinalImageType="3D", Manufacturer="HOLOGIC, Inc.", SeriesDescription="L MLO Breast Tomosynthesis Image")
+
     assert [image.dbt_form.value for image in (projection, reconstruction, unknown)] == ["PROJECTION", "RECONSTRUCTION", "UNKNOWN"]
+    assert untagged.dbt_form is DbtForm.RECONSTRUCTION
     assert unknown.manufacturer == "GE MEDICAL SYSTEMS"
     assert flat.dbt_form is None
 
