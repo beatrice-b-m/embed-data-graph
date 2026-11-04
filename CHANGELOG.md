@@ -22,6 +22,13 @@
   intentionally so: they are unreliable and mostly missing, and the
   body-measurement table is the canonical source.
 
+### Fixed
+
+- A pandas `NaT` in a dated column, such as a null `studydate_anon` in a
+  patients frame or a null `collection_date_anon` in a body-measurement frame
+  parsed with `pd.to_datetime`, is now a missing date. Previously it raised
+  `TypeError` and aborted the whole load.
+
 ## 0.3.1 — 2026-10-21
 
 Source release `v0.3.1`. This patch release fixes image identity: image and ROI
