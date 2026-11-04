@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A `body_measurements` table input for the dated measurement table
+  (`magview_bmi_anon`), bound by default to `empi_anon`,
+  `collection_date_anon`, `height_inches`, `weight_pounds` and `bmi`. Each
+  value is a patient attribute observation of the same name dated by its
+  collection date, read with `Patient.attribute_as_of`.
+  `Patient.replace_attribute_history` replaces one attribute's observations.
+- Intake answers `menarche_age`, `menopause_age` and `live_births`, bound to
+  `menarcheage_anon`, `menopauseage_anon` and `livebirths`, recorded as
+  attribute observations per exam context without a patient scalar.
+- `Exam.location_id`, an opaque exam-location identifier bound to
+  `loc_num_anon`.
+
+### Changed
+
+- MagView `height` and `weight` remain unbound and are now documented as
+  intentionally so: they are unreliable and mostly missing, and the
+  body-measurement table is the canonical source.
+
+### Fixed
+
+- A pandas `NaT` in a dated column, such as a null `studydate_anon` in a
+  patients frame or a null `collection_date_anon` in a body-measurement frame
+  parsed with `pd.to_datetime`, is now a missing date. Previously it raised
+  `TypeError` and aborted the whole load.
+
 ## 0.3.1 — 2026-10-21
 
 Source release `v0.3.1`. This patch release fixes image identity: image and ROI

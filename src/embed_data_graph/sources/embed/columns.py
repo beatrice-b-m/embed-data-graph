@@ -1,11 +1,13 @@
 """Small, table-local column maps for the EMBED source loader.
 
 The maps bind only source facts that are established at this adapter boundary.
-Every bound default names a column that exists in the internal EMBED MagView
-or V1c image-metadata tables; semantic fields without such a column default to
+Every bound default names a column that exists in the internal EMBED MagView,
+patient body-measurement or V1c image-metadata tables; semantic fields without such a column default to
 None and can be bound explicitly through ``columns``.
 In particular, registry payload fields and future image identity fields remain
 explicitly configurable instead of being guessed from similarly named columns.
+MagView ``height`` and ``weight`` are unreliable and mostly missing, so they
+are not bound; the dated body-measurement table is the canonical source.
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "race": "race",
                 "ethnicity": "ethnicity",
                 "birth_year": None,
+                "menarche_age": "menarcheage_anon",
+                "menopause_age": "menopauseage_anon",
+                "live_births": "livebirths",
             }
         ),
         "exams": MappingProxyType(
@@ -41,6 +46,7 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "visit_type": "vtype",
                 "modality": "modality_desc",
                 "patient_age": "age_at_study_anon",
+                "location_id": "loc_num_anon",
             }
         ),
         "findings": MappingProxyType(
@@ -133,6 +139,15 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "result": "result",
             }
         ),
+        "body_measurements": MappingProxyType(
+            {
+                "patient_id": "empi_anon",
+                "measured_date": "collection_date_anon",
+                "height_inches": "height_inches",
+                "weight_pounds": "weight_pounds",
+                "bmi": "bmi",
+            }
+        ),
         "procedures": MappingProxyType(
             {
                 "patient_id": "empi_anon",
@@ -197,6 +212,7 @@ _REQUIRED = {
     "rois": frozenset({"coordinates"}),
     "hormone_history": frozenset({"patient_id", "category", "medication"}),
     "procedure_history": frozenset({"patient_id", "category", "procedure"}),
+    "body_measurements": frozenset({"patient_id", "measured_date"}),
     "procedures": frozenset(
         {"patient_id", "performed_date", "procedure_type", "laterality"}
     ),
