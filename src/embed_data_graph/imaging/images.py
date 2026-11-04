@@ -353,21 +353,34 @@ class MammogramImage(MutableEntity):
 
         Read from words in ``series_description`` (PROJ, PROJECTION; RECON,
         RECONSTRUCTION, RECONSTRUCTED, SLICES, VOLUME) and in the tokens of
-        ``dicom_image_type`` (such as TOMO_PROJ). Wording differs by
-        manufacturer, so the form is UNKNOWN when neither source names one,
-        when one names both, or when the two disagree.
+        ``dicom_image_type`` (such as TOMO_PROJ). When exactly one form is
+        named, that is the form; naming both, or the two sources disagreeing,
+        is UNKNOWN. Hologic projections always name a projection in their
+        series description, so a Hologic DBT image whose series description
+        names neither form, such as ``L MLO Breast Tomosynthesis Image``, is a
+        RECONSTRUCTION. Other manufacturers word their series differently, so
+        theirs stay UNKNOWN unless a form is named, as does an image without a
+        series description.
 
         Examples
         --------
         >>> MammogramImage("I", modality="3D", series_description="L CC Tomosynthesis Projection").dbt_form
         <DbtForm.PROJECTION: 'PROJECTION'>
+        >>> MammogramImage("I", modality="3D", manufacturer="HOLOGIC, Inc.",
+        ...                series_description="L MLO Breast Tomosynthesis Image").dbt_form
+        <DbtForm.RECONSTRUCTION: 'RECONSTRUCTION'>
         """
 
         if not self.is_dbt:
             return None
-        forms = {form for form in (_dbt_form(self.series_description), _dbt_form(self.dicom_image_type))}
-        forms.discard(DbtForm.UNKNOWN)
-        return forms.pop() if len(forms) == 1 else DbtForm.UNKNOWN
+        words = set(_words(self.series_description)) | set(_words(self.dicom_image_type))
+        projection, reconstruction = bool(words & _PROJECTION_WORDS), bool(words & _RECONSTRUCTION_WORDS)
+        if projection or reconstruction:
+            if projection and reconstruction:
+                return DbtForm.UNKNOWN
+            return DbtForm.PROJECTION if projection else DbtForm.RECONSTRUCTION
+        hologic = (self.manufacturer or "").strip().upper().startswith("HOLOGIC")
+        return DbtForm.RECONSTRUCTION if hologic and self.series_description else DbtForm.UNKNOWN
 
     @property
     def view_modification(self) -> ViewModification:
@@ -498,16 +511,6 @@ _SIDE_VIEW = re.compile(r"(L|R)(XCCL|MLO|CC|ML|LM)")
 
 def _words(text: Optional[str]) -> Tuple[str, ...]:
     return tuple(re.findall(r"[A-Z0-9]+", (text or "").upper()))
-
-
-def _dbt_form(text: Optional[str]) -> DbtForm:
-    words = set(_words(text))
-    projection, reconstruction = bool(words & _PROJECTION_WORDS), bool(words & _RECONSTRUCTION_WORDS)
-    if projection and not reconstruction:
-        return DbtForm.PROJECTION
-    if reconstruction and not projection:
-        return DbtForm.RECONSTRUCTION
-    return DbtForm.UNKNOWN
 
 
 def _series_side_and_view(text: Optional[str]) -> Tuple[Laterality, ViewPosition]:
