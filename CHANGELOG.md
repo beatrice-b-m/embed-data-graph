@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Exam.imaged_laterality`, the `Laterality` of the breasts an exam imaged
+  (LEFT, RIGHT, BILATERAL or UNKNOWN). It is read from the exam description by
+  case-insensitive substrings in order (`bil`, then `left`, then `right`), the
+  rule EMBED cohort pipelines use, never from findings or images.
+  `Exam.breast_sides` is unchanged: it lists sides with a finding or image,
+  which is not the set of breasts imaged.
+
 ## 0.3.1 — 2026-10-21
 
 Source release `v0.3.1`. This patch release fixes image identity: image and ROI
