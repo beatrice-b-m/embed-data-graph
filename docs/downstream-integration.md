@@ -26,8 +26,7 @@ the consumer's environment specification and qualification notes.
 ## Choose public imports
 
 The root facade is the preferred import boundary for common types:
-`DatasetGraph`, `Patient`, `Exam`, `ImagedLaterality`, `ImagedLateralityBasis`,
-`Finding`, `Procedure`, `ProcedureIdentity`,
+`DatasetGraph`, `Patient`, `Exam`, `Finding`, `Procedure`, `ProcedureIdentity`,
 `Pathology`, `CancerRegistryEntry`, `MammogramImage`, `RegionOfInterest`, `Box`,
 `Laterality`, `ImageModality`, `ViewPosition`, `load_embed`, `validate`,
 `ValidationResult`, `Issue`, `SourceRef`, and `LoadReport`.
