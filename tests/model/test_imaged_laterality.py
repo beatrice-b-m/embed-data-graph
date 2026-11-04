@@ -1,83 +1,55 @@
-"""Which breasts an exam imaged: derived from description and images, never findings."""
+"""Which breasts an exam imaged: derived from the description, never findings or images."""
 
 import pytest
 
-from embed_data_graph import DatasetGraph, Exam, Finding, ImagedLateralityBasis, Laterality, MammogramImage, load_embed
+from embed_data_graph import DatasetGraph, Exam, Finding, Laterality, MammogramImage, load_embed
 
 
 @pytest.mark.parametrize(
     ("description", "expected"),
     [
         ("MG Screening Bilateral w/ Tomo", Laterality.BILATERAL),
-        ("MG Screen Bilat", Laterality.BILATERAL),
+        ("mg screen bilat", Laterality.BILATERAL),
         ("MG Diagnostic Left", Laterality.LEFT),
-        ("US Breast Rt Limited", Laterality.RIGHT),
-        ("MG Diag Left and Right", Laterality.BILATERAL),
+        ("US BREAST RIGHT LIMITED", Laterality.RIGHT),
     ],
 )
-def test_description_words_name_the_imaged_breasts(description, expected):
+def test_description_substrings_name_the_imaged_breasts(description, expected):
+    assert Exam("A", description=description).imaged_laterality is expected
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("MG Diag Bilat, Left Focused", Laterality.BILATERAL),
+        ("MG Diag Left and Right", Laterality.LEFT),
+    ],
+)
+def test_several_sides_resolve_in_fixed_order_bilateral_left_right(description, expected):
+    assert Exam("A", description=description).imaged_laterality is expected
+
+
+@pytest.mark.parametrize("description", [None, "", "MG Screening", "US Breast Rt Limited"])
+def test_a_description_naming_no_side_is_unknown_with_no_sides(description):
     imaged = Exam("A", description=description).imaged_laterality
 
-    assert (imaged.laterality, imaged.basis) == (expected, ImagedLateralityBasis.EXAM_DESCRIPTION)
+    assert (imaged, imaged.expand()) == (Laterality.UNKNOWN, ())
 
 
-@pytest.mark.parametrize("description", [None, "", "MG Screening", "Clinical"])
-def test_without_side_words_or_images_the_laterality_is_unknown(description):
-    imaged = Exam("A", description=description).imaged_laterality
-
-    assert (imaged.laterality, imaged.basis, imaged.sides) == (Laterality.UNKNOWN, ImagedLateralityBasis.NONE, ())
-
-
-def test_a_contradictory_description_is_a_conflict_not_a_side():
-    imaged = Exam("A", description="Bilat Screen Left").imaged_laterality
-
-    assert (imaged.laterality, imaged.basis) == (Laterality.UNKNOWN, ImagedLateralityBasis.CONFLICT)
-
-
-def exam_with(description, *sides):
-    graph = DatasetGraph()
-    exam = graph.register(Exam("A", description=description))
-    for index, side in enumerate(sides):
-        exam.add_image(MammogramImage(f"I{index}", laterality=side, accession_number="A"))
-    return exam
-
-
-def test_images_supply_the_laterality_when_the_description_does_not():
-    assert exam_with("MG Screening", "L", "R").imaged_laterality.laterality is Laterality.BILATERAL
-    imaged = exam_with(None, "R", "UNKNOWN").imaged_laterality
-    assert (imaged.laterality, imaged.basis) == (Laterality.RIGHT, ImagedLateralityBasis.IMAGE_LATERALITY)
-
-
-def test_agreeing_sources_are_reported_together():
-    imaged = exam_with("MG Diagnostic Left", "L").imaged_laterality
-
-    assert (imaged.laterality, imaged.basis) == (Laterality.LEFT, ImagedLateralityBasis.DESCRIPTION_AND_IMAGES)
-
-
-def test_partial_images_of_a_bilateral_exam_do_not_narrow_it():
-    imaged = exam_with("MG Screening Bilateral", "L").imaged_laterality
-
-    assert (imaged.laterality, imaged.basis) == (Laterality.BILATERAL, ImagedLateralityBasis.EXAM_DESCRIPTION)
-    assert (imaged.description_laterality, imaged.image_laterality) == (Laterality.BILATERAL, Laterality.LEFT)
-
-
-@pytest.mark.parametrize("sides", [("R",), ("L", "R")])
-def test_images_of_a_side_the_description_excludes_are_a_conflict(sides):
-    imaged = exam_with("MG Diagnostic Left", *sides).imaged_laterality
-
-    assert (imaged.laterality, imaged.basis) == (Laterality.UNKNOWN, ImagedLateralityBasis.CONFLICT)
-
-
-def test_findings_never_make_a_breast_imaged():
+def test_images_and_findings_never_set_the_imaged_breasts():
     graph = DatasetGraph()
     exam = graph.register(Exam("A", description="MG Diagnostic Left"))
     exam.add_finding(Finding("A", "R", "1"))
+    exam.add_image(MammogramImage("I1", laterality="R", accession_number="A"))
+    unnamed = graph.register(Exam("B", description="MG Screening"))
+    unnamed.add_image(MammogramImage("I2", laterality="L", accession_number="B"))
 
-    assert exam.imaged_laterality.sides == (Laterality.LEFT,)
+    assert exam.imaged_laterality.expand() == (Laterality.LEFT,)
     assert set(exam.breast_sides) == {Laterality.RIGHT}
+    assert unnamed.imaged_laterality is Laterality.UNKNOWN
 
 
 def test_loaded_exams_derive_it_from_the_description_column():
     graph = load_embed(exams=[{"acc_anon": "A1", "desc": "MG Diagnostic Right w/ Tomo"}]).graph
 
-    assert graph.exam("A1").imaged_laterality.sides == (Laterality.RIGHT,)
+    assert graph.exam("A1").imaged_laterality is Laterality.RIGHT
