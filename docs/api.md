@@ -167,21 +167,17 @@ per exam context; choose among them with `Patient.attribute_as_of`.
 The eight graph entities are Patient, Exam, Finding, Procedure, Pathology,
 CancerRegistryEntry, MammogramImage and RegionOfInterest. Interpretations and
 history observations are mutable values stored on their entity. BreastSide,
-ImagedLaterality, ProcedureIdentity, PatientAttributeObservation, PathologyObservation,
+ProcedureIdentity, PatientAttributeObservation, PathologyObservation,
 ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values.
 
-`exam.imaged_laterality` says which breasts an exam imaged: an
-`ImagedLaterality` with `laterality` (LEFT, RIGHT, BILATERAL or UNKNOWN),
-`sides`, its `basis` (`ImagedLateralityBasis`) and the separate
-`description_laterality` and `image_laterality` it was derived from. No EMBED
-column records it, and finding sides are never used: they list breasts with a
-finding, not breasts imaged. The description is parsed for the words LEFT/LT,
-RIGHT/RT and BILATERAL/BILAT/BIL/BOTH; naming left and right means bilateral,
-and contradictory words are a conflict. Unilateral images contribute the sides
-they show. Agreeing sources give `DESCRIPTION_AND_IMAGES`; images showing fewer
-sides than a bilateral description keep it bilateral, because image metadata may
-be partial; any other disagreement is `CONFLICT` with UNKNOWN laterality.
-UNKNOWN never defaults to a side. It is computed on each access.
+`exam.imaged_laterality` is the `Laterality` of the breasts an exam imaged:
+LEFT, RIGHT, BILATERAL or UNKNOWN, with `.expand()` giving the sides. No EMBED
+column records it. The exam description is searched case-insensitively for the
+substrings `bil` (BILATERAL), else `left` (LEFT), else `right` (RIGHT), else it
+is UNKNOWN; the order settles descriptions that name several sides. Finding
+sides and image laterality are never used: findings list breasts with a finding,
+and image metadata may cover only part of an exam. UNKNOWN never defaults to a
+side. It is computed on each access.
 
 ## Imaging and supplied association collections
 
