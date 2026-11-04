@@ -11,7 +11,8 @@
   and keep the supplied view text as `source_view_position`. These were
   previously rejected as unknown image fields.
 - `MammogramImage.dbt_form` (`DbtForm`: projection, reconstruction or unknown)
-  for DBT images, `MammogramImage.view_modification` (`ViewModification`:
+  for DBT images, read from projection or reconstruction wording; a Hologic
+  series description naming neither form is a reconstruction, `MammogramImage.view_modification` (`ViewModification`:
   standard, modified or unknown), and `recovered_laterality` /
   `recovered_view_position`, which fall back to the series description only
   when no tag value was supplied. `DbtForm` and `ViewModification` are root

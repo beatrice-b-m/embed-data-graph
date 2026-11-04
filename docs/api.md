@@ -199,9 +199,12 @@ UNKNOWN. Three properties are derived on access:
 
 - `dbt_form` is `DbtForm.PROJECTION` or `RECONSTRUCTION` for a DBT image when
   the series-description words or ImageType tokens name exactly one form (for
-  example `Tomosynthesis Projection` or `TOMO_PROJ`), else `UNKNOWN`; it is None
-  for images that are not DBT. Wording differs by manufacturer, so `UNKNOWN` is
-  expected.
+  example `Tomosynthesis Projection` or `TOMO_PROJ`); naming both is
+  `UNKNOWN`. Hologic projections always say so in their series description, so
+  a Hologic DBT image whose series description names no form is a
+  `RECONSTRUCTION`. Other manufacturers' images that name no form, and images
+  without a series description, are `UNKNOWN`. It is None for images that are
+  not DBT.
 - `view_modification` is `ViewModification.MODIFIED` when the spot flag is True,
   a view modifier is represented, or the view text has words besides the base
   view and side (`SPOT CC`); otherwise `STANDARD` for a known view and
