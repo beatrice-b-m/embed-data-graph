@@ -1504,13 +1504,19 @@ def _birth_year_value(value: Any) -> Optional[int]:
 
 
 def _date_value(value: Any) -> Optional[date]:
+    """Return a calendar date from a date, datetime or ISO/YYYYMMDD text, else None.
+
+    Missing values, including pandas ``NaT`` (a ``datetime`` subclass whose
+    ``date()`` is not a ``date``), are None rather than a date-like sentinel.
+    """
+
     value = scalar(value)
+    if is_missing(value):
+        return None
     if isinstance(value, datetime):
         return value.date()
     if type(value) is date:
         return value
-    if value is None:
-        return None
     text = str(value).strip()
     if len(text) == 8 and text.isdigit():
         try:
