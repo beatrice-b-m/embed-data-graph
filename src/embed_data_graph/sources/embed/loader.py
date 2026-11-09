@@ -18,6 +18,7 @@ from embed_data_graph.clinical.findings import (
     FindingRecordType,
 )
 from embed_data_graph.clinical.histories import (
+    CancerHistoryObservation,
     MedicationHistoryObservation,
     ProcedureHistoryObservation,
 )
@@ -45,6 +46,7 @@ from embed_data_graph.sources.embed._values import (
 from embed_data_graph.sources.embed import vocabulary
 from embed_data_graph.sources.embed.columns import resolve_columns
 from embed_data_graph.sources.embed.histories import (
+    normalize_cancer_history,
     normalize_medication_history,
     normalize_procedure_history,
 )
@@ -104,6 +106,7 @@ def load_embed(
     rois: Optional[_TableInput] = None,
     hormone_history: Optional[_TableInput] = None,
     procedure_history: Optional[_TableInput] = None,
+    cancer_history: Optional[_TableInput] = None,
     procedures: Optional[_TableInput] = None,
     pathology: Optional[_TableInput] = None,
     magview: Optional[_TableInput] = None,
@@ -135,6 +138,11 @@ def load_embed(
     hormone_history, procedure_history : iterable of mappings or DataFrame-like, optional
         Patient-reported facts, not verified performed procedures. Default None
         skips the table. Merge of unkeyed history requires explicit record IDs.
+    cancer_history : iterable of mappings or DataFrame-like, optional
+        Reported cancer history (CancerHist) about the patient or a relative,
+        loaded as ``CancerHistoryObservation`` values with the same snapshot
+        and merge rules. Default None skips the table. Only the subject flag is
+        decoded; codes keep their source values without meanings.
     procedures, pathology : iterable of mappings or DataFrame-like, optional
         Performed procedures and reported pathology bundles; default None.
     magview : iterable of mappings or DataFrame-like, optional
@@ -280,6 +288,7 @@ def load_embed(
             ("rois", rois),
             ("hormone_history", hormone_history),
             ("procedure_history", procedure_history),
+            ("cancer_history", cancer_history),
             ("procedures", procedures),
             ("pathology", pathology),
             ("magview", magview),
@@ -317,6 +326,14 @@ def load_embed(
         mode,
         issues,
         kind="reported_procedure",
+    )
+    history_patients |= _load_history(
+        materialized["cancer_history"],
+        graph,
+        column_maps["cancer_history"],
+        mode,
+        issues,
+        kind="cancer",
     )
 
     # Source adapters share the one normalized invocation snapshot.
@@ -361,6 +378,7 @@ def _resolve_source_keys(
         "rois",
         "hormone_history",
         "procedure_history",
+        "cancer_history",
         "procedures",
         "pathology",
         "magview",
@@ -455,6 +473,7 @@ _CREATED_PARENTS: dict[str, tuple[str, ...]] = {
     "images": ("patient_id", "accession"),
     "hormone_history": ("patient_id",),
     "procedure_history": ("patient_id",),
+    "cancer_history": ("patient_id",),
     "procedures": ("patient_id", "accession"),
     "pathology": ("patient_id", "accession"),
     "registry": ("patient_id",),
@@ -787,16 +806,8 @@ def _load_history(
     """Apply one history table and return the patients it addressed."""
 
     groups = _group_rows(rows, columns, ("patient_id",), f"{kind}_history", issues)
-    normalizer = (
-        normalize_medication_history
-        if kind == "medication"
-        else normalize_procedure_history
-    )
-    observation_type = (
-        MedicationHistoryObservation
-        if kind == "medication"
-        else ProcedureHistoryObservation
-    )
+    normalizer: Callable[..., Any] = _HISTORY_NORMALIZERS[kind]
+    observation_type = _HISTORY_TYPES[kind]
     for patient_id in sorted(groups, key=repr):
         patient = _ensure_patient(graph, patient_id)
         observations: list[Any] = []
@@ -865,7 +876,7 @@ def _apply_history_snapshot(
             facts.append(item)
         else:
             incoming_groups.setdefault(item.record_id, []).append(item)
-    managed = ("category", "medication", "context_accession", "continuous", "current", "reported_duration", "started", "stopped", "comment") if kind == "medication" else ("category", "procedure", "context_accession", "laterality", "reported_result")
+    managed = _HISTORY_MANAGED[kind]
     for record_id, observations in incoming_groups.items():
         target = keyed.get(record_id)
         updates: dict[str, Any] = {}
@@ -896,15 +907,34 @@ def _apply_history_snapshot(
     _set_history_values(patient, other + list(keyed.values()) + facts)
 
 
+_HISTORY_NORMALIZERS: dict[str, Callable[..., Any]] = {
+    "medication": normalize_medication_history,
+    "reported_procedure": normalize_procedure_history,
+    "cancer": normalize_cancer_history,
+}
+_HISTORY_TYPES: dict[str, type] = {
+    "medication": MedicationHistoryObservation,
+    "reported_procedure": ProcedureHistoryObservation,
+    "cancer": CancerHistoryObservation,
+}
+_HISTORY_MANAGED: dict[str, tuple[str, ...]] = {
+    "medication": ("category", "medication", "context_accession", "continuous", "current", "reported_duration", "started", "stopped", "comment"),
+    "reported_procedure": ("category", "procedure", "context_accession", "laterality", "reported_result"),
+    "cancer": (
+        "about_relative", "relationship", "category", "cancer_code", "context_accession", "side", "bilateral",
+        "premenopausal", "diagnosis_age", "diagnosis_month", "diagnosis_year", "current_age", "brca1", "brca2", "comment",
+    ),
+}
+
+
 def _history_kind(item: Any, kind: str) -> bool:
-    if kind == "medication":
-        return isinstance(item, MedicationHistoryObservation)
-    return isinstance(item, ProcedureHistoryObservation)
+    return isinstance(item, _HISTORY_TYPES[kind])
 
 
 def _set_history_values(patient: Any, values: Sequence[Any]) -> None:
     patient.replace_history("medication", [item for item in values if isinstance(item, MedicationHistoryObservation)])
     patient.replace_history("procedure", [item for item in values if isinstance(item, ProcedureHistoryObservation)])
+    patient.replace_history("cancer", [item for item in values if isinstance(item, CancerHistoryObservation)])
 
 
 def _ensure_patient(graph: DatasetGraph, patient_id: str) -> Any:

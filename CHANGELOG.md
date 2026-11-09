@@ -4,6 +4,13 @@
 
 ### Added
 
+- A `cancer_history` table input for CancerHist, loading
+  `CancerHistoryObservation` values (`embed_data_graph.clinical.histories`)
+  read through `Patient.cancer_history` and the history kind `"cancer"`. The
+  subject flag decodes to `about_relative`; relationship, category and cancer
+  codes keep source codes without meanings, and BRCA, side and timing fields
+  stay raw text, because their catalog meanings are provisional or
+  unresolved.
 - `Patient.history_known_on` and `Patient.history_as_of`. Reported history is
   captured at the intake of its context exam, so a fact is known on that exam's
   date, resolved on each access; facts without a resolvable date are left out

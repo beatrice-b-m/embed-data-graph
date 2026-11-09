@@ -224,6 +224,103 @@ class ProcedureHistoryObservation(PatientHistoryObservation):
         self.reported_result = Code.coerce(self.reported_result)
 
 
+@dataclass(eq=False)
+class CancerHistoryObservation(PatientHistoryObservation):
+    """A reported cancer-history entry about the patient or a relative.
+
+    Only the subject is decoded: the source flag 1 means the patient and 0 a
+    relative. Relationship, category and cancer codes keep their source codes
+    without meanings, because their dictionaries are provisional, and the
+    side, bilateral, premenopausal, age, date and BRCA fields are kept as raw
+    text because their meanings are unresolved. Relative history is never the
+    patient's own diagnosis or genetic result, and an entry is not a verified
+    diagnosis.
+
+    Attributes
+    ----------
+    about_relative : bool or None, optional
+        True for a relative's history, False for the patient's own, None when
+        the subject is not reported or not recognized.
+    relationship : Code or None, optional
+        Reported relationship category of the relative, such as ``M``; a
+        category, never a unique relative. Blank means relationship unknown.
+    category : Code or None, optional
+        Reported history category (provisionally ``B`` breast, ``O`` other).
+    cancer_code : Code or None, optional
+        Reported cancer code, read within its category; no meaning is assigned.
+    context_accession : str or None, optional
+        Exam whose intake recorded the entry; not when the cancer happened.
+    side, bilateral, premenopausal : str or None, optional
+        Raw reported text.
+    diagnosis_age, diagnosis_month, diagnosis_year, current_age : str or None, optional
+        Raw reported timing text; no unit or calendar is inferred.
+    brca1, brca2 : str or None, optional
+        Raw reported text; never decoded as positive, negative or untested.
+    comment : str or None, optional
+        Source comment; blank text becomes None.
+    source : SourceRef or None, optional
+        Row the fact was read from. Default None.
+    record_id : str or None, optional
+        Explicit patient-scoped record ID; None (default) for an unkeyed fact.
+
+    Examples
+    --------
+    >>> entry = CancerHistoryObservation(about_relative=True, relationship="M", category="B")
+    >>> entry.relationship.code, entry.relationship.meaning
+    ('M', None)
+    """
+
+    about_relative: Optional[bool] = None
+    """True for a relative's history, False for the patient's own, None when unknown."""
+    relationship: Optional[Code] = None
+    """Reported relationship category; never a unique relative."""
+    category: Optional[Code] = None
+    """Reported history category; provisional, no meaning assigned."""
+    cancer_code: Optional[Code] = None
+    """Reported cancer code within its category; no meaning assigned."""
+    context_accession: Optional[str] = None
+    """Exam whose intake recorded the entry; not when the cancer happened."""
+    side: Optional[str] = None
+    """Raw reported side text."""
+    bilateral: Optional[str] = None
+    """Raw reported bilateral text."""
+    premenopausal: Optional[str] = None
+    """Raw reported premenopausal text."""
+    diagnosis_age: Optional[str] = None
+    """Raw reported age at diagnosis."""
+    diagnosis_month: Optional[str] = None
+    """Raw reported diagnosis month."""
+    diagnosis_year: Optional[str] = None
+    """Raw reported diagnosis year."""
+    current_age: Optional[str] = None
+    """Raw reported current age."""
+    brca1: Optional[str] = None
+    """Raw reported BRCA1 text; not decoded."""
+    brca2: Optional[str] = None
+    """Raw reported BRCA2 text; not decoded."""
+    comment: Optional[str] = None
+    """Source comment."""
+    source: Optional[SourceRef] = None
+    """Row the fact was read from; evidence, not a clinical event."""
+    record_id: Optional[str] = None
+    """Explicit patient-scoped record ID; None for an unkeyed reported fact."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.about_relative is not None and not isinstance(self.about_relative, bool):
+            raise TypeError("about_relative must be bool or None")
+        for name in ("relationship", "category", "cancer_code"):
+            setattr(self, name, Code.coerce(getattr(self, name)))
+        for name in _CANCER_TEXT_FIELDS:
+            setattr(self, name, _optional_text(getattr(self, name), name))
+
+
+_CANCER_TEXT_FIELDS = (
+    "context_accession", "side", "bilateral", "premenopausal", "diagnosis_age", "diagnosis_month",
+    "diagnosis_year", "current_age", "brca1", "brca2", "comment",
+)
+
+
 def _required_code(value: Any, name: str) -> Code:
     if isinstance(value, Code):
         return value

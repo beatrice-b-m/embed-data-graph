@@ -11,7 +11,7 @@ from embed_data_graph import (
 )
 from embed_data_graph.core.selection import Selection
 from embed_data_graph.clinical.attributes import AttributeResolution
-from embed_data_graph.clinical.histories import PatientHistoryObservation
+from embed_data_graph.clinical.histories import CancerHistoryObservation, PatientHistoryObservation
 
 
 class ResearchPatient(Patient):
@@ -58,6 +58,8 @@ assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
 assert_type(Patient("P").attribute_resolution("sex", date(2020, 1, 1)), AttributeResolution)
 assert_type(Patient("P").history_as_of(date(2020, 1, 1), kind="procedure"), Tuple[PatientHistoryObservation, ...])
+assert_type(Patient("P").cancer_history, Tuple[CancerHistoryObservation, ...])
+assert_type(load_embed(cancer_history=[{"empi_anon": "P", "patient": 0}]), LoadReport)
 assert_type(MammogramImage("I").dbt_form, Optional[DbtForm])
 assert_type(MammogramImage("I").view_modification, ViewModification)
 assert_type(MammogramImage("I").recovered_view_position, ViewPosition)
