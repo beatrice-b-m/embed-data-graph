@@ -110,6 +110,10 @@ def table_schema(name: str) -> TableSchema:
                    "recommendation_meaning": "string", "performed_date": "datetime", "procedure_type": "string",
                    "procedure_type_meaning": "string", "laterality": "string", "severity": "scalar",
                    "report_documented_date": "datetime"}
+        columns.update(finding_number="string", reported_laterality="string")
+        columns.update({field: _type(field) for field in _FIELDS["registry"].split()})
+        for field in _CODES["registry"]:
+            columns.update({field: "string", field + "_meaning": "string"})
         key = ("record_key",)
     elif name == "unresolved_values":
         columns = {"record_key": "string", "field": "string", "value": "scalar"}
@@ -297,17 +301,25 @@ def _issue_row(issue: Issue, kind: Optional[str] = None, key: Optional[str] = No
 def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) -> Dict[str, List[Dict[str, Scalar]]]:
     """Build a fresh snapshot with no mutation or pandas import."""
 
+    from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry, UnresolvedClinicalRecord
+
     names = (*_GRAINS, *_LINKS, "values", "unresolved", "unresolved_values", "issues")
     output: Dict[str, List[Dict[str, Scalar]]] = {name: [] for name in names}
     wanted = set(names if requested is None else requested)
     schemas = {name: table_schema(name) for name in names}
     diagnostics = [_issue_row(issue) for issue in graph.load_issues] if "issues" in wanted else []
 
-    def normalize(row: Dict[str, Any], table: str, kind: str, key: str) -> Dict[str, Scalar]:
+    def normalize(
+        row: Dict[str, Any], table: str, kind: str, key: str,
+        applicable_dates: Optional[Tuple[str, ...]] = None,
+    ) -> Dict[str, Scalar]:
         normalized: Dict[str, Scalar] = {}
         for name, dtype in schemas[table].columns.items():
             value = row.get(name)
             if dtype == "datetime":
+                if applicable_dates is not None and name not in applicable_dates:
+                    normalized[name] = None
+                    continue
                 parsed = _date(value)
                 if parsed is None:
                     issue = Issue("missing_date" if value is None or value == "" else "invalid_date",
@@ -362,19 +374,38 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
         key = _encode((base, occurrence))
         row = {name: getattr(record, name, None) for name in table_schema("unresolved").columns}
         row.update(record_key=key, address=_encode(address), kind=kind, reason=reason, incomplete=True)
-        if row["patient_id"] is None:
-            for part in address if isinstance(address, tuple) else ():
-                if isinstance(part, tuple) and len(part) == 2 and part[0] == "exam":
-                    exam = graph.exam(part[1])
-                    row["patient_id"] = exam.patient_id if exam is not None else None
-                    row["accession_number"] = part[1]
-        if kind == "registry" and row["patient_id"] is None:
+        for part in address if isinstance(address, tuple) else ():
+            if not isinstance(part, tuple) or len(part) != 2:
+                continue
+            if part[0] == "finding":
+                accession, number = part[1]
+                if row["finding_number"] is None:
+                    row["finding_number"] = number
+            elif part[0] == "exam":
+                accession = part[1]
+            else:
+                continue
+            if row["accession_number"] is None:
+                row["accession_number"] = accession
+            if row["patient_id"] is None:
+                exam = graph.exam(accession)
+                row["patient_id"] = exam.patient_id if exam is not None else None
+        applicable_dates: Tuple[str, ...] = ()
+        if isinstance(record, UnresolvedClinicalRecord):
+            applicable_dates = ("performed_date", "report_documented_date") if record.kind == "pathology" else ("performed_date",)
+        elif isinstance(record, UnkeyedRegistryEntry):
+            applicable_dates = ("diagnosis_date",)
             row["patient_id"] = address[1][1]
+            # Match keyed registry projection: parse the original date rather
+            # than the date property's truncated text; use typed code facts.
+            row["diagnosis_date"] = record.payload.get("diagnosis_date")
+            for field in _CODES["registry"]:
+                _code_fields(row, field, getattr(record, field))
         interpretation = getattr(record, "interpretation", None)
         for name in ("assessment", "recommendation"):
             _code_fields(row, name, getattr(interpretation, name, None))
         _code_fields(row, "procedure_type", getattr(record, "procedure_type", None))
-        output["unresolved"].append(normalize(row, "unresolved", kind, key))
+        output["unresolved"].append(normalize(row, "unresolved", kind, key, applicable_dates))
         for field, value in leaves.items():
             output["unresolved_values"].append(dict(record_key=key, field=field, value=value))
     output["issues"] = list({row["issue_key"]: row for row in diagnostics}.values())

@@ -470,6 +470,7 @@ def _retain_unkeyed_findings(
                                        _decoder(vocabulary.RECOMMENDATION)(raw("recommendation")), row.source),
             {name: _decoder(vocab)(raw(name)) for name, vocab in FINDING_DESCRIPTORS.items() if not is_missing(raw(name))},
             row.source,
+            reported_laterality=Laterality.coerce(text(raw("laterality"))),
         )
         snapshots[(accession, row.table)].append(record)
         issues.append(Issue("missing_finding_identity", "Assessment retained on exam without finding number or side",

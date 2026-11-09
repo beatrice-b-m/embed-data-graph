@@ -172,7 +172,8 @@ a contested exam can therefore occur in more than one patient partition.
 
 `Exam.unkeyed_findings` retains each assessment row lacking a finding number,
 with its interpretation and descriptors, `finding_number=None`, and UNKNOWN
-laterality. These are snapshot records, not invented finding entities. Include
+laterality. `reported_laterality` separately retains the source side (UNKNOWN
+when missing or unrecognized, never inferred bilateral). These are snapshot records, not invented finding entities. Include
 them when reviewing all assessments of an exam. Refresh replaces an addressed
 exam/input-table snapshot; merge appends incoming rows and reports that identity
 is required to deduplicate them. Repeated merge loads retain repeated rows.
@@ -208,3 +209,10 @@ historical load diagnostics, deduplicated across loads; projection issues are
 computed on demand and do not mutate it. Partitions/selections retain load issues
 that address included entities; unaddressed batch diagnostics remain on the full
 graph. See [tabular schemas](tabular.md) for types and relationship contracts.
+
+Incomplete clinical records preserve their reported accession and finding number
+as optional source facts, not new identities. Subsets retain unresolved records
+through their reported exam even when their referenced finding is absent.
+The unresolved projection exposes typed registry facts for unkeyed entries and
+checks date validity only for fields applicable to the record type; unrelated
+columns in the shared schema remain null without missing-date issues.

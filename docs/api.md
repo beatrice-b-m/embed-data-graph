@@ -365,3 +365,8 @@ contacts contract for snapshot, partition and invalid-accession behavior.
 and `table_schema(name)`. `TableSchema` and the scalar cell alias `Scalar` live in
 `embed_data_graph.core.tabular`. See [tabular schemas](tabular.md) for the stable
 column lists, datetime rules, supplementary tables and key encoding.
+
+`UnresolvedClinicalRecord.accession_number` and `.finding_number` preserve
+reported parent identifiers. `UnkeyedFinding.reported_laterality` is the source
+side, distinct from its unresolved `laterality`. These facts, plus all typed
+registry facts for unkeyed registry entries, are columns of `unresolved`.

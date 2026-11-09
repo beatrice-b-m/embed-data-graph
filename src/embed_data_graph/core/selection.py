@@ -50,8 +50,10 @@ class Selection(Generic[_SelectedT]):
         result = DatasetGraph(source_scope=self.graph.source_scope)
         result._entities = {kind: {obj.key: obj for obj in members.values() if obj.kind == kind} for kind in KINDS}
         addresses = {(obj.kind, obj.key) for obj in members.values()}
-        result.unresolved_records = {address: entries for address, entries in self.graph.unresolved_records.items()
-                                     if isinstance(address, tuple) and any(isinstance(part, tuple) and part in addresses for part in address)}
+        record_index = self.graph._record_index()
+        matched = {entry for address in addresses for entry in record_index.get(address, ())}
+        result.unresolved_records = {address: self.graph.unresolved_records[address]
+                                     for _, address in sorted(matched, key=lambda entry: entry[0])}
         keys = {(kind, _encode(key)) for kind, key in addresses}
         result.load_issues = tuple(issue for issue in self.graph.load_issues
                                   if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys)

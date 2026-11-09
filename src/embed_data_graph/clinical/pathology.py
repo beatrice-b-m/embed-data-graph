@@ -566,6 +566,10 @@ class UnresolvedClinicalRecord:
     payload : mapping, optional
         The source row as supplied, copied into a dict. Default empty.
 
+    accession_number, finding_number : str or None, optional
+        Identifiers reported by the source row, independent of its resolved
+        attachment. Default None; no missing identifier is inferred.
+
     Notes
     -----
     A missing severity is not a benign result. These records are not graph
@@ -595,6 +599,11 @@ class UnresolvedClinicalRecord:
     """Pathology descriptor slots in slot order."""
     payload: Dict[str, Any] = field(default_factory=dict)
     """The source row as supplied."""
+
+    accession_number: Optional[str] = None
+    """Exam accession reported by the row, or None."""
+    finding_number: Optional[str] = None
+    """Finding number reported by the row, or None."""
 
     def __post_init__(self) -> None:
         if self.kind not in {"procedure", "pathology"}:

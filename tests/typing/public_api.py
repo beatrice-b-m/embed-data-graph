@@ -89,3 +89,7 @@ assert_type(patient.claimed_exams, Tuple[Exam, ...])
 assert_type(patient.invalid_accession_records, Tuple[InvalidAccessionRecord, ...])
 assert_type(Exam("D").unkeyed_findings, Tuple[UnkeyedFinding, ...])
 assert_type(load_embed(invalid_accessions={"999", "invalid"}), LoadReport)
+
+assert_type(UnresolvedClinicalRecord("pathology", "incomplete").accession_number, Optional[str])
+assert_type(UnresolvedClinicalRecord("pathology", "incomplete").finding_number, Optional[str])
+assert_type(Exam("E").unkeyed_findings[0].reported_laterality, Laterality)

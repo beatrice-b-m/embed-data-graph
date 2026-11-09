@@ -998,11 +998,15 @@ class DatasetGraph:
         """Unresolved-record addresses by each entity address they name."""
 
         index: Dict[Any, List[Tuple[int, Any]]] = defaultdict(list)
-        for position, address in enumerate(self.unresolved_records):
-            if isinstance(address, tuple):
-                for part in address:
-                    if isinstance(part, tuple):
-                        index[part].append((position, address))
+        for position, (address, entries) in enumerate(self.unresolved_records.items()):
+            targets = {part for part in address if isinstance(part, tuple)} if isinstance(address, tuple) else set()
+            for entry in entries:
+                record = entry.get("record")
+                accession = getattr(record, "accession_number", None)
+                if accession is not None:
+                    targets.add(("exam", accession))
+            for target in targets:
+                index[target].append((position, address))
         return index
 
     def _copy(

@@ -477,6 +477,8 @@ def _unresolved_record(
         kind=kind,
         reason=reason,
         patient_id=_id_at(payload, columns.get("patient_id")),
+        accession_number=_id_at(payload, columns.get("accession")),
+        finding_number=_id_at(payload, columns.get("finding_number")),
         laterality=Laterality.coerce(text(cell(payload, columns.get("laterality")))),
         performed_date=text(cell(payload, columns.get("performed_date", columns.get("procedure_date")))),
         procedure_type=PROCEDURE_TYPE.decode(code(cell(payload, columns.get("procedure_type")))),
