@@ -755,3 +755,26 @@ Do not count only the keyed `findings` table when reviewing all assessments:
 records. `exam_patients` preserves contested claims; `exams.patient_id` still
 represents ownership. No projection reduces BI-RADS, chooses outcomes or defines
 a cohort. For records without pandas, run `python -m examples.tabular_views`.
+
+Incomplete records retain usable evidence without requiring address parsing:
+
+```python
+from embed_data_graph import load_embed
+
+graph = load_embed(
+    findings=[{"empi_anon": "P", "acc_anon": "A", "numfind": None,
+               "side": "R", "asses": "A"}],
+    pathology=[{"empi_anon": "P", "acc_anon": "A", "numfind": 1,
+                "bside": None, "path_severity": 0}],
+    registry=[{"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2021-05-01",
+               "HISTOLOGY_ICDO3": 8520.0, "BEHAVIOR_ICDO3": 2.0}],
+).graph
+rows = graph.records("unresolved")
+finding = next(row for row in rows if row["kind"] == "finding")
+assert finding["reported_laterality"] == "R"
+assert finding["laterality"] == "UNKNOWN" and finding["finding_number"] is None
+pathology = next(row for row in rows if row["kind"] == "pathology")
+assert (pathology["accession_number"], pathology["finding_number"]) == ("A", "1")
+registry = next(row for row in rows if row["kind"] == "registry")
+assert registry["icdo3"] == "8520/2" and registry["diagnosis_date"].year == 2021
+```

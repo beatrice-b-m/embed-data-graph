@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Incomplete-record projection fixes (#24)
+
+- Preserve reported exam and finding identifiers on unresolved clinical records,
+  including in subsets whose referenced finding is absent.
+- Expose source side as `reported_laterality` on unkeyed assessments without
+  changing their unresolved finding identity or `laterality`.
+- Project the same typed registry facts for unkeyed entries in `unresolved`.
+- Emit missing/invalid-date diagnostics only for applicable unresolved fields.
+
 ### Incomplete clinical contacts (#20)
 
 - Retain assessments without finding numbers on their exam, with unknown side.

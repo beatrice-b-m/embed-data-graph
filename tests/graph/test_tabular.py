@@ -180,3 +180,95 @@ def test_invalid_accession_diagnostics_follow_the_patient_into_subsets():
     unowned = load_embed(exams=[{"acc_anon": 999}]).graph
     issue = next(row for row in unowned.records("issues") if row["code"] == "invalid_accession")
     assert issue["entity_key"] is None
+
+
+@pytest.mark.parametrize("table", ["procedures", "pathology"])
+@pytest.mark.parametrize("missing", ["bside", "procdate_anon"])
+def test_unresolved_clinical_rows_retain_reported_exam_and_finding(table, missing):
+    row = {"empi_anon": "P", "acc_anon": "A2", "numfind": 1, "bside": "R",
+           "procdate_anon": "2021-05-01", "type": "B", "path_severity": 0, missing: None}
+    graph = load_embed(**{table: [row]}).graph
+    records = [r for r in graph.records("unresolved") if r["kind"] == table.rstrip("s")]
+    record, = records
+    assert (record["patient_id"], record["accession_number"], record["finding_number"]) == ("P", "A2", "1")
+    values = {r["field"]: r["value"] for r in graph.records("unresolved_values") if r["record_key"] == record["record_key"]}
+    assert values["/accession_number"] == "A2" and values["/finding_number"] == "1"
+    for subset in (graph.select(level="patient", predicate=lambda p: True),
+                   graph.partition(level="patient", key=lambda p: p.patient_id)["P"]):
+        assert subset.records("unresolved") == graph.records("unresolved")
+
+
+@pytest.mark.parametrize("side, expected", [("R", "R"), ("L", "L"), ("B", "B"), (None, "UNKNOWN"), ("?", "UNKNOWN")])
+def test_unkeyed_assessment_exposes_reported_side_without_resolving_identity(side, expected):
+    graph = load_embed(magview=[{"empi_anon": "P", "acc_anon": "A", "numfind": None,
+                                "side": side, "asses": "A"}]).graph
+    row, = graph.records("unresolved")
+    assert row["reported_laterality"] == expected
+    assert row["laterality"] == "UNKNOWN" and row["finding_number"] is None
+    assert row["assessment"] == "A" and graph.findings == ()
+    assert graph.exam("A").unkeyed_findings[0].reported_laterality.value == expected
+    assert graph.table("unresolved").reported_laterality.iloc[0] == expected
+
+
+def test_unkeyed_registry_projects_same_typed_facts_as_keyed_registry():
+    row = {"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2021-05-01", "LATERALITY": 9,
+           "HISTOLOGY_ICDO3": 8520.0, "BEHAVIOR_ICDO3": 2.0, "PRIMARY_SITE": "C504",
+           "T_Stage": "T1", "N_Stage": "N0", "M_Stage": "M0", "STAGE_GRP": "I",
+           "ESTROGEN_RECEPTOR": 1.0, "PROGESTERONE_RECEPTOR": 0.0, "HER2": 30.0, "VITAL_STATUS": 1.0}
+    graph = load_embed(registry=[row, {**row, "cancer_outcome_registry_id": "R"}]).graph
+    unkeyed, = graph.records("unresolved")
+    keyed, = graph.records("registry")
+    for field in graph.table_schema("registry").columns:
+        if field not in {"entity_key", "incomplete", "registry_id"}:
+            assert unkeyed[field] == keyed[field], field
+    assert unkeyed["histology"] == "8520" and unkeyed["behavior"] == "2"
+    assert unkeyed["icdo3"] == "8520/2" and unkeyed["laterality"] == "UNKNOWN"
+    assert unkeyed["registry_id"] is None and unkeyed["incomplete"]
+    assert len(graph.records("registry")) == len(graph.registry_entries) == 1
+    frame = graph.table("unresolved")
+    assert frame.diagnosis_date.iloc[0] == pd.Timestamp("2021-05-01")
+    assert pd.api.types.is_datetime64_ns_dtype(frame.diagnosis_date)
+    for subset in (graph.select(level="patient", predicate=lambda p: True),
+                   graph.partition(level="patient", key=lambda p: p.patient_id)["P"]):
+        assert subset.records("unresolved") == graph.records("unresolved")
+
+
+@pytest.mark.parametrize("value, expected_code", [(None, "missing_date"), ("bad", "invalid_date"), ("2021-05-01junk", "invalid_date"), ("2021-05-01", None)])
+def test_unresolved_date_diagnostics_only_check_applicable_fields(value, expected_code):
+    graph = load_embed(
+        registry=[{"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": value}],
+        magview=[{"empi_anon": "P", "acc_anon": "A", "numfind": None, "asses": "A"},
+                 {"empi_anon": "P", "acc_anon": 999, "asses": "S"}],
+        procedures=[{"empi_anon": "P", "acc_anon": "A", "type": "B", "procdate_anon": value}],
+        pathology=[{"empi_anon": "P", "acc_anon": "A", "type": "B", "procdate_anon": value,
+                    "pdate_anon": value, "path_severity": 0}],
+    ).graph
+    issues = graph.records("issues")
+    for record in graph.records("unresolved"):
+        relevant = [r for r in issues if r["entity_key"] == record["record_key"] and r["code"] in {"missing_date", "invalid_date"}]
+        applicable = {"registry": {"diagnosis_date"}, "procedure": {"performed_date"},
+                      "pathology": {"performed_date", "report_documented_date"}}.get(record["kind"], set())
+        assert {r["field"] for r in relevant} == (applicable if expected_code else set())
+        assert all(r["code"] == expected_code for r in relevant)
+
+
+def test_incomplete_evidence_respects_column_overrides_and_refresh():
+    columns = {"pathology": {"patient_id": "p", "accession": "a", "finding_number": "f", "severity": "s"},
+               "findings": {"patient_id": "p", "accession": "a", "finding_number": "f", "laterality": "side_fact", "assessment": "assessment"}}
+    graph = load_embed(pathology=[{"p": "P", "a": "A", "f": 2, "s": 0}],
+                       findings=[{"p": "P", "a": "A", "f": None, "side_fact": "R", "assessment": "A"}], columns=columns).graph
+    pathology = next(r for r in graph.records("unresolved") if r["kind"] == "pathology")
+    assert (pathology["accession_number"], pathology["finding_number"]) == ("A", "2")
+    load_embed(findings=[{"p": "P", "a": "A", "f": None, "side_fact": "L", "assessment": "A"}], columns=columns, into=graph)
+    finding = next(r for r in graph.records("unresolved") if r["kind"] == "finding")
+    assert finding["reported_laterality"] == "L"
+
+
+def test_unresolved_exam_context_does_not_expand_exam_subsets():
+    graph = load_embed(pathology=[{"empi_anon": "P", "acc_anon": acc, "numfind": 1, "path_severity": 0}
+                                  for acc in ("A", "B")]).graph
+    subsets = [graph.select(level="exam", predicate=lambda e: e.accession_number == "A"),
+               graph.partition(level="exam", key=lambda e: e.accession_number)["A"]]
+    for subset in subsets:
+        rows = subset.records("unresolved")
+        assert rows and {r["accession_number"] for r in rows} == {"A"}

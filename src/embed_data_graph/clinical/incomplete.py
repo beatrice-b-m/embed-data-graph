@@ -25,6 +25,10 @@ class UnkeyedFinding:
         Optional physical evidence, never clinical identity.
     laterality : Laterality
         Always UNKNOWN: a missing number cannot establish a side-level finding.
+    reported_laterality : Laterality, optional
+        Side reported by this row, independent of finding identity. Default
+        UNKNOWN; missing or unrecognized values remain UNKNOWN, never bilateral.
+        This source fact may be used for side-level assessment review.
     finding_number : None
         Explicitly missing.
     reason : str
@@ -38,9 +42,13 @@ class UnkeyedFinding:
     interpretation: Optional[ImagingInterpretation] = None
     descriptors: Dict[str, Any] = field(default_factory=dict)
     source: Optional[SourceRef] = None
+    reported_laterality: Laterality = Laterality.UNKNOWN
     laterality: Laterality = field(default=Laterality.UNKNOWN, init=False)
     finding_number: None = field(default=None, init=False)
     reason: str = field(default="missing_finding_identity", init=False)
+
+    def __post_init__(self) -> None:
+        self.reported_laterality = Laterality.coerce(self.reported_laterality)
 
 
 @dataclass

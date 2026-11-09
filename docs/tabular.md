@@ -57,7 +57,20 @@ contribute no leaves. The main grain columns expose common scalar facts;
 
 `unresolved` includes incomplete procedure/pathology records, unkeyed findings,
 invalid-accession rows, and unkeyed registry entries. `incomplete=True` distinguishes
-these from entity rows. `record_key` encodes the address and semantic record
+these from entity rows. Reported `accession_number` and `finding_number` are
+explicit columns on incomplete clinical records, including when the referenced
+finding is absent. Consumers do not need to parse opaque addresses.
+
+Unkeyed findings retain UNKNOWN `laterality` and null `finding_number`; their
+`reported_laterality` preserves the source side independently of identity. Missing
+or unrecognized source sides stay UNKNOWN and are never treated as bilateral.
+Unkeyed registry entries expose every typed registry fact in `unresolved`,
+including parsed `diagnosis_date`, normalized histology/behavior and `icdo3`,
+source and normalized laterality, stages, receptors and vital status. Their
+`registry_id` is null; the `registry` entity table still contains keyed entities
+only. Raw registry payload remains in `unresolved_values` for audit.
+
+`record_key` encodes the address and semantic record
 contents plus an occurrence number for identical rows. It identifies a snapshot
 occurrence only, never a clinical identity or cross-load match. Duplicates stay
 visible. `unresolved_values` exposes their remaining semantic leaves; raw physical
@@ -74,7 +87,11 @@ Date columns accept ISO dates/timestamps (including UTC offsets) and US
 `MM/DD/YYYY`, normalized to naive UTC. Supported range is 1678-01-01 inclusive
 through 2262-01-01 exclusive, so records and nanosecond DataFrames agree.
 Unparseable, out-of-range and missing dates become null and produce `invalid_date`
-or `missing_date` rows in `issues`. Source date text is still retained in the
+or `missing_date` rows in `issues`. For the shared `unresolved` schema, only
+applicable fields are checked: registry diagnosis date; procedure performed
+date; pathology performed and report-documented dates. Unkeyed findings and
+invalid-accession records have no applicable date columns. Other date columns
+remain null without emitting diagnostics. Source date text is still retained in the
 supplementary values table for audit. No ambiguous formats are guessed.
 
 Coded fields become strings and companion `<field>_meaning` columns; absent
@@ -459,6 +476,26 @@ Key: `record_key`
 | `laterality` | string |
 | `severity` | scalar |
 | `report_documented_date` | datetime |
+| `finding_number` | string |
+| `reported_laterality` | string |
+| `registry_id` | string |
+| `diagnosis_date` | datetime |
+| `source_laterality` | string |
+| `histology` | string |
+| `behavior` | string |
+| `icdo3` | string |
+| `primary_site` | string |
+| `t_stage` | string |
+| `n_stage` | string |
+| `m_stage` | string |
+| `stage_group` | string |
+| `vital_status` | string |
+| `estrogen_receptor` | string |
+| `estrogen_receptor_meaning` | string |
+| `progesterone_receptor` | string |
+| `progesterone_receptor_meaning` | string |
+| `her2` | string |
+| `her2_meaning` | string |
 
 ### unresolved_values
 
