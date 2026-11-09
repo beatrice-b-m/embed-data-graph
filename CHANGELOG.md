@@ -27,6 +27,15 @@
   is assigned to, ahead of entries reached through its exams. Previously only
   exam-assigned entries were returned, so a patient-scoped search missed
   registry diagnoses never linked to an imaging accession.
+- The `findings` fields `mass`, `asymmetry`, `architectural_distortion` and
+  `calcification` are no longer bound by default. The MagView `mass`,
+  `asymmetry`, `arch_distortion` and `calc` columns were computed by a legacy
+  labeling rule, not recorded by radiologists, and that rule has known errors,
+  so loading them as source flags misrepresented them. `finding.descriptors`
+  no longer contains these four keys after a default load. To keep the
+  previous behavior, pass `columns={"findings": {"mass": "mass", "asymmetry":
+  "asymmetry", "architectural_distortion": "arch_distortion",
+  "calcification": "calc"}}`; the values then load as legacy derived codes.
 
 ## 0.3.1 — 2026-10-21
 

@@ -6,6 +6,9 @@ or V1c image-metadata tables; semantic fields without such a column default to
 None and can be bound explicitly through ``columns``.
 In particular, registry payload fields and future image identity fields remain
 explicitly configurable instead of being guessed from similarly named columns.
+Columns derived by a legacy rule rather than recorded at the source, such as
+the MagView ``mass``, ``asymmetry``, ``arch_distortion`` and ``calc`` flags,
+are unbound by default; bind them explicitly to load them as legacy values.
 """
 
 from __future__ import annotations
@@ -56,10 +59,13 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "depth": "depth",
                 "distance": "distance",
                 "record_type": None,
-                "mass": "mass",
-                "asymmetry": "asymmetry",
-                "architectural_distortion": "arch_distortion",
-                "calcification": "calc",
+                # MagView mass, asymmetry, arch_distortion and calc were
+                # computed by a legacy labeling rule, not recorded by
+                # radiologists, so they are not bound as source flags.
+                "mass": None,
+                "asymmetry": None,
+                "architectural_distortion": None,
+                "calcification": None,
                 "mass_shape": "massshape",
                 "mass_margin": "massmargin",
                 "mass_density": "massdens",
