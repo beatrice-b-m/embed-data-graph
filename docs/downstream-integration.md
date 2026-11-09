@@ -27,7 +27,8 @@ the consumer's environment specification and qualification notes.
 
 The root facade is the preferred import boundary for common types:
 `DatasetGraph`, `Patient`, `Exam`, `Finding`, `Procedure`, `ProcedureIdentity`,
-`Pathology`, `CancerRegistryEntry`, `UnkeyedRegistryEntry`, `MammogramImage`,
+`Pathology`, `CancerRegistryEntry`, `UnkeyedRegistryEntry`,
+`UnresolvedClinicalRecord`, `MammogramImage`,
 `RegionOfInterest`, `Box`,
 `Laterality`, `ImageModality`, `ViewPosition`, `load_embed`, `validate`,
 `ValidationResult`, `Issue`, `SourceRef`, and `LoadReport`.
@@ -243,7 +244,8 @@ The expected cardinalities are one patient, one exam, one finding, two
 complete procedures, and two pathology bundles. Reversing `rows` should keep
 the same cardinalities and the same canonical object identities. An incomplete
 procedure or ambiguous pathology key should remain visible in
-`graph.unresolved_records` instead of being promoted using a row ordinal.
+`graph.unresolved_records` and in `patient.unresolved_clinical_records` instead
+of being promoted using a row ordinal.
 
 ## Integration checklist
 
