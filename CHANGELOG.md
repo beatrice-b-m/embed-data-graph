@@ -432,3 +432,10 @@ First tagged source release, `v0.1.0`, under the MIT license, with Python
   downstream integration guidance.
 - Specify object and API contracts, development checks, and compatibility policy.
 - Record local test qualification and synthetic loading measurements.
+
+### Incomplete clinical contacts (#20)
+
+- Retain assessments without finding numbers on their exam, with unknown side.
+- Expose contested exams through every claimant and include them in patient partitions.
+- Retain configurable invalid accessions (default `999`) as patient-scoped records.
+- Bind accession category, reported left/right finding totals and patient cohort number.

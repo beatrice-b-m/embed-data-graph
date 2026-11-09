@@ -1,0 +1,73 @@
+"""Source records retained without inventing clinical identities."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
+from embed_data_graph.clinical.interpretations import ImagingInterpretation
+from embed_data_graph.core.primitives import Laterality
+from embed_data_graph.core.source import SourceRef
+
+
+@dataclass
+class UnkeyedFinding:
+    """An assessment row on a known exam without a finding number.
+
+    Attributes
+    ----------
+    accession_number : str
+        Known parent exam; no finding identity is invented.
+    interpretation : ImagingInterpretation or None
+        Assessment and recommendation as reported.
+    descriptors : dict
+        Semantic descriptor names to codes; owned copy supplied by the loader.
+    source : SourceRef or None
+        Optional physical evidence, never clinical identity.
+    laterality : Laterality
+        Always UNKNOWN: a missing number cannot establish a side-level finding.
+    finding_number : None
+        Explicitly missing.
+    reason : str
+        Machine-readable issue code. Records are snapshot values, not entities;
+        repeated identical rows remain separate. Refresh replaces the addressed
+        exam/table snapshot, and merge preserves it with a diagnostic.
+    """
+
+    accession_number: str
+    interpretation: Optional[ImagingInterpretation] = None
+    descriptors: Dict[str, Any] = field(default_factory=dict)
+    source: Optional[SourceRef] = None
+    laterality: Laterality = field(default=Laterality.UNKNOWN, init=False)
+    finding_number: None = field(default=None, init=False)
+    reason: str = field(default="missing_finding_identity", init=False)
+
+
+@dataclass
+class InvalidAccessionRecord:
+    """A row whose accession is configured as invalid, retained under its patient.
+
+    Attributes
+    ----------
+    patient_id : str or None
+        Reported patient; None records remain graph-level unresolved records.
+    accession_number : str
+        Invalid source value, never registered as an exam key.
+    table : str
+        Input table name.
+    values : dict
+        Mapped semantic values, keyed as ``grain.field`` for wide MagView rows.
+        Includes explicit nulls; no physical column names or consumer metadata.
+    source : SourceRef or None
+        Physical evidence only.
+    reason : str
+        ``invalid_accession``. These are snapshot records, without semantic IDs;
+        refresh replaces each addressed patient/table snapshot. Merge preserves
+        the previous snapshot and emits a diagnostic.
+    """
+
+    patient_id: Optional[str]
+    accession_number: str
+    table: str
+    values: Dict[str, Any]
+    source: Optional[SourceRef] = None
+    reason: str = field(default="invalid_accession", init=False)

@@ -7,10 +7,11 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from math import isfinite
 from numbers import Integral, Real
-from typing import Any, Callable, Literal, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence, Union
 
 from embed_data_graph.clinical.attributes import PatientAttributeObservation
 from embed_data_graph.clinical.exams import Exam
+from embed_data_graph.clinical.incomplete import InvalidAccessionRecord, UnkeyedFinding
 from embed_data_graph.clinical.findings import (
     Finding,
     FindingNormalizationEvidence,
@@ -118,6 +119,7 @@ def load_embed(
     columns: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     mode: Literal["refresh", "merge"] = "refresh",
     parents: Literal["create", "existing"] = "create",
+    invalid_accessions: Iterable[object] = ("999",),
 ) -> LoadReport:
     """Load any supported subset of EMBED tables into a mutable graph.
 
@@ -204,6 +206,13 @@ def load_embed(
         their accession is context, not an exam they create. A row that
         addresses no patient or exam is not loaded. Skipped rows are counted
         in one INFO issue per table with code ``"rows_outside_graph"``.
+
+    invalid_accessions : iterable of scalar identifiers, optional
+        Values excluded from exam identity; default ("999",), the internal V2
+        sentinel. Pass () to disable. Matching rows remain patient-scoped in
+        ``invalid_accession_records`` and graph unresolved records with an
+        issue. Refresh replaces addressed patient/table snapshots; merge
+        preserves existing snapshots and reports that no identity can merge.
 
     Returns
     -------
@@ -308,6 +317,8 @@ def load_embed(
             ("registry", registry),
         )
     }
+    invalid = {identifier(value) for value in invalid_accessions}
+    materialized = _retain_invalid_accessions(materialized, graph, column_maps, invalid, mode, parents, issues)
     if parents == "existing":
         materialized = _keep_existing_parents(materialized, graph, column_maps, issues)
 
@@ -379,6 +390,100 @@ def load_embed(
     _report_history_anchors(graph, history_patients, issues)
 
     return LoadReport(graph=graph, issues=tuple(issues), source_scope=resolved_scope)
+
+
+def _retain_invalid_accessions(
+    tables: Mapping[str, list[_InputRow]], graph: DatasetGraph,
+    columns: Mapping[str, Mapping[str, Optional[str]]], invalid: set[Optional[str]],
+    mode: str, parents: str, issues: list[Issue],
+) -> dict[str, list[_InputRow]]:
+    result: dict[str, list[_InputRow]] = {}
+    for table, rows in tables.items():
+        result[table] = []
+        snapshots: dict[Optional[str], list[InvalidAccessionRecord]] = {}
+        for row in rows:
+            cmap = columns[table]
+            accession = _id_at(row.mapping, cmap.get("accession"))
+            patient_id = _id_at(row.mapping, cmap.get("patient_id"))
+            if accession is None or accession not in invalid:
+                result[table].append(row)
+                if patient_id is not None:
+                    snapshots.setdefault(patient_id, [])
+                continue
+            if parents == "existing" and (patient_id is None or graph.patient(patient_id) is None):
+                issues.append(Issue("rows_outside_graph", "Invalid-accession row is outside the patient subset",
+                                    context={"table": table, "rows": 1}))
+                continue
+            grains = ("patients", "exams", "findings", "procedures", "pathology", "magview") if table == "magview" else (table,)
+            values = {f"{grain}.{name}": scalar(row.mapping[physical])
+                      for grain in grains for name, physical in columns[grain].items()
+                      if physical is not None and physical in row.mapping}
+            record = InvalidAccessionRecord(patient_id, accession, table, values, row.source)
+            snapshots.setdefault(patient_id, []).append(record)
+            issues.append(Issue("invalid_accession", "Invalid accession retained without an exam identity",
+                                source=row.source, context={"patient_id": patient_id, "accession_number": accession, "table": table}))
+        for patient_id, records in snapshots.items():
+            patient = (graph.patient(patient_id) or (_ensure_patient(graph, patient_id) if records else None)) if patient_id is not None else None
+            address = ("invalid_accession", table, ("patient", patient_id))
+            if mode == "merge" and records:
+                issues.append(Issue("unkeyed_merge_requires_identity", "Invalid-accession snapshot preserved in merge",
+                                    context={"patient_id": patient_id, "table": table}))
+                continue
+            if mode == "merge":
+                continue
+            if patient is not None:
+                patient._invalid_accessions[table] = tuple(records)
+            if records:
+                graph.unresolved_records[address] = [{"record": r, "reason": r.reason, "kind": table} for r in records]
+            else:
+                graph.unresolved_records.pop(address, None)
+    return result
+
+
+def _retain_unkeyed_findings(
+    rows: Sequence[_InputRow], graph: DatasetGraph, columns: Mapping[str, Optional[str]],
+    mode: str, issues: list[Issue], claims: Claims,
+) -> list[_InputRow]:
+    keyed = []
+    snapshots: dict[tuple[str, str], list[UnkeyedFinding]] = {}
+    for row in rows:
+        accession = _id_at(row.mapping, columns.get("accession"))
+        number = _id_at(row.mapping, columns.get("finding_number"))
+        if accession is None:
+            keyed.append(row)
+            continue
+        snapshots.setdefault((accession, row.table), [])
+        if number is not None:
+            keyed.append(row)
+            continue
+        exam = _ensure_exam(graph, accession)
+        _claim_exam_from_rows(graph, exam, [row], columns, claims)
+        def raw(name: str) -> Any:
+            physical = columns.get(name)
+            return row.mapping.get(physical) if physical is not None else None
+        record = UnkeyedFinding(
+            accession, _interpretation(_decoder(vocabulary.ASSESSMENT)(raw("assessment")),
+                                       _decoder(vocabulary.RECOMMENDATION)(raw("recommendation")), row.source),
+            {name: _decoder(vocab)(raw(name)) for name, vocab in FINDING_DESCRIPTORS.items() if not is_missing(raw(name))},
+            row.source,
+        )
+        snapshots[(accession, row.table)].append(record)
+        issues.append(Issue("missing_finding_identity", "Assessment retained on exam without finding number or side",
+                            source=row.source, context={"accession_number": accession}))
+    for (accession, table), records in snapshots.items():
+        exam = _ensure_exam(graph, accession)
+        if mode == "merge":
+            if records:
+                issues.append(Issue("unkeyed_merge_requires_identity", "Unkeyed finding snapshot preserved in merge",
+                                    context={"accession_number": accession}))
+            continue
+        exam._unkeyed_findings[table] = tuple(records)
+        address = ("unkeyed_finding", table, ("exam", accession))
+        if records:
+            graph.unresolved_records[address] = [{"record": r, "reason": r.reason, "kind": "finding"} for r in records]
+        else:
+            graph.unresolved_records.pop(address, None)
+    return keyed
 
 
 def _resolve_source_keys(
@@ -562,7 +667,10 @@ def _project_core_rows(
             ("findings", ("accession", "finding_number")),
         ):
             cmap = columns[grain]
-            if _semantic_key(row.mapping, cmap, identity) is not None:
+            if _semantic_key(row.mapping, cmap, identity) is not None or (
+                grain == "findings" and _id_at(row.mapping, cmap.get("accession")) is not None
+                and any(cmap.get(field) in row.mapping for field in ("finding_number", "assessment", "recommendation"))
+            ):
                 result[grain].append(row)
     return result
 
@@ -589,6 +697,7 @@ def _load_patients(
     """
 
     converters = {
+        "cohort_number": identifier,
         "sex": text,
         "race": text,
         "ethnicity": text,
@@ -647,7 +756,7 @@ def _load_patients(
             graph.update(patient, **scalars)
 
 
-_PATIENT_SCALARS = frozenset({"sex", "race", "ethnicity", "birth_year"})
+_PATIENT_SCALARS = frozenset({"sex", "race", "ethnicity", "birth_year", "cohort_number"})
 _BODY_MEASURES = ("height_inches", "weight_pounds", "bmi")
 
 
@@ -744,6 +853,9 @@ def _load_exams(
             columns,
             {
                 "exam_date": text,
+                "accession_type": text,
+                "total_left_findings": _number,
+                "total_right_findings": _number,
                 "exam_description": text,
                 "density": _decoder(vocabulary.DENSITY),
                 "exam_type": _decoder(vocabulary.EXAM_TYPE, uppercase=False),
@@ -778,6 +890,7 @@ def _load_findings(
     source_scope: str,
     claims: Claims,
 ) -> None:
+    rows = _retain_unkeyed_findings(rows, graph, columns, mode, issues, claims)
     groups = _group_rows(
         rows,
         columns,

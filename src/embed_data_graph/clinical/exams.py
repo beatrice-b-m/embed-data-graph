@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
+from embed_data_graph.clinical.incomplete import UnkeyedFinding
 from embed_data_graph.core.codes import Code
 from embed_data_graph.core.entity import MutableEntity, Reference, readonly_mapping
 from embed_data_graph.core.graph import ensure_graph
@@ -112,6 +113,11 @@ class Exam(MutableEntity):
         Opaque identifier of the exam location (EMBED ``loc_num_anon``); no
         site, facility or ordering is implied. Default None.
 
+    accession_type : str or None, optional
+        Source accession category; default None.
+    total_left_findings, total_right_findings : float or None, optional
+        Reported finding totals, without recomputation; default None.
+
     Notes
     -----
     Collections such as ``findings`` are resolved by the owning graph from the
@@ -135,6 +141,10 @@ class Exam(MutableEntity):
         Reference("registry_references", "registry", "child", many=True),
     )
 
+    @classmethod
+    def _indexed_fields(cls) -> FrozenSet[str]:
+        return super()._indexed_fields() | {"asserted_patient_ids"}
+
     accession_number: str
     """Exam accession; the registry key."""
     patient_id: Optional[str]
@@ -153,6 +163,12 @@ class Exam(MutableEntity):
     """Exam modality and its meaning."""
     patient_age: Optional[float]
     """Patient age in years at the exam; EMBED top-codes ages of 90 or more to 89."""
+    accession_type: Optional[str]
+    """Source accession category, including non_magview when supplied."""
+    total_left_findings: Optional[float]
+    """Reported left finding count; None when absent or conflicting."""
+    total_right_findings: Optional[float]
+    """Reported right finding count; None when absent or conflicting."""
     location_id: Optional[str]
     """Opaque exam-location identifier; no site or ordering is implied."""
     asserted_patient_ids: Set[str]
@@ -184,6 +200,9 @@ class Exam(MutableEntity):
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
         location_id: Optional[str] = None,
+        accession_type: Optional[str] = None,
+        total_left_findings: Optional[float] = None,
+        total_right_findings: Optional[float] = None,
     ) -> None:
         super().__init__()
         self.accession_number = accession_number
@@ -202,6 +221,9 @@ class Exam(MutableEntity):
         self.modality = Code.coerce(modality)
         self.patient_age = patient_age
         self.location_id = location_id
+        self.accession_type = accession_type
+        self.total_left_findings = total_left_findings
+        self.total_right_findings = total_right_findings
         self.linked_accessions = set(linked_accessions or ())
         self.registry_references = set(registry_references or ())
         self._owner_explicit = bool(owner_explicit)
@@ -209,6 +231,25 @@ class Exam(MutableEntity):
         self._claim_sources: Dict[str, FrozenSet[str]] = {}
         self.metadata = dict(metadata or {})
         self.source = source
+        self._unkeyed_findings: Dict[str, Tuple[UnkeyedFinding, ...]] = {}
+
+    @property
+    def unkeyed_findings(self) -> Tuple[UnkeyedFinding, ...]:
+        """Assessment rows lacking finding numbers, grouped by source table.
+
+        These snapshot records have UNKNOWN side and retain their assessment
+        and descriptors. They are separate from keyed ``findings`` and must be
+        included in exam-level assessment review. No identity is synthesized.
+        """
+
+        return tuple(item for table in sorted(self._unkeyed_findings)
+                     for item in self._unkeyed_findings[table])
+
+    @property
+    def contested(self) -> bool:
+        """Whether multiple patients claim this exam, even with an explicit owner."""
+
+        return len(self.asserted_patient_ids) > 1
 
     def _coerce(self, name: str, value: Any) -> Any:
         if name == "accession_number":
@@ -398,6 +439,10 @@ class Exam(MutableEntity):
             "modality": self.modality,
             "patient_age": self.patient_age,
             "location_id": self.location_id,
+            "accession_type": self.accession_type,
+            "unkeyed_findings": self.unkeyed_findings,
+            "total_left_findings": self.total_left_findings,
+            "total_right_findings": self.total_right_findings,
             "linked_accessions": self.linked_accessions,
             "registry_references": self.registry_references,
             "metadata": self.metadata,

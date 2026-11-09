@@ -88,6 +88,7 @@ class DatasetGraph:
         self._scoped: Dict[str, Dict[int, MutableEntity]] = defaultdict(dict)
         self._context: Set[int] = set()
         self.unresolved_records: Dict[Any, Any] = {}
+        self._claimants: Dict[str, Dict[int, Exam]] = defaultdict(dict)
 
     # -- registries ----------------------------------------------------------
 
@@ -312,6 +313,8 @@ class DatasetGraph:
     # -- indexing ------------------------------------------------------------
 
     def _index(self, entity: MutableEntity) -> None:
+        from embed_data_graph.clinical.exams import Exam
+
         self._entities[entity.kind][entity.key] = entity
         object.__setattr__(entity, "_graph", self)
         for ref in entity._references:
@@ -319,11 +322,16 @@ class DatasetGraph:
                 self._referrers[(ref.kind, target)][(id(entity), ref.field)] = entity
         for index, alias, _ in _aliases(entity, {}):
             self._aliases[index][alias] = entity
+        if isinstance(entity, Exam):
+            for claimant in entity.asserted_patient_ids:
+                self._claimants[claimant][id(entity)] = entity
         patient_id = entity._scope_patient_id()
         if patient_id is not None:
             self._scoped[patient_id][id(entity)] = entity
 
     def _unindex(self, entity: MutableEntity) -> None:
+        from embed_data_graph.clinical.exams import Exam
+
         registry = self._entities[entity.kind]
         if registry.get(entity.key) is entity:
             del registry[entity.key]
@@ -337,6 +345,9 @@ class DatasetGraph:
         for index, alias, _ in _aliases(entity, {}):
             if self._aliases[index].get(alias) is entity:
                 del self._aliases[index][alias]
+        if isinstance(entity, Exam):
+            for claimant in entity.asserted_patient_ids:
+                self._claimants[claimant].pop(id(entity), None)
         patient_id = entity._scope_patient_id()
         if patient_id is not None and patient_id in self._scoped:
             scoped = self._scoped[patient_id]
@@ -510,6 +521,9 @@ class DatasetGraph:
                 patient_id = entity._scope_patient_id()
                 if patient_id is not None:
                     index[patient_id].append(entity)
+        for exam in self.exams:
+            for patient_id in exam.asserted_patient_ids:
+                index[patient_id].append(exam)
         return index
 
     def remove(self, entity: MutableEntity) -> None:

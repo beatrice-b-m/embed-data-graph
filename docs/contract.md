@@ -161,3 +161,32 @@ predicates without imposing a study-specific rejection policy on the library.
 Synthetic tests establish software behavior. Private-data, real-pixel, and downstream
 scientific qualification require their own evidence. See
 [loading measurements](../benchmarks/README.md) for synthetic scale results.
+
+### Incomplete contacts and contested ownership
+
+`Patient.claimed_exams` includes owned exams and all exams naming that patient
+in their source claims, once each. `Patient.exams` retains its ownership-only
+meaning. `Exam.contested` marks multiple source claims, including when an owner
+was explicitly chosen. Patient partitions include claimed exams and descendants;
+a contested exam can therefore occur in more than one patient partition.
+
+`Exam.unkeyed_findings` retains each assessment row lacking a finding number,
+with its interpretation and descriptors, `finding_number=None`, and UNKNOWN
+laterality. These are snapshot records, not invented finding entities. Include
+them when reviewing all assessments of an exam. Refresh replaces an addressed
+exam/input-table snapshot; merge preserves it and reports that identity is
+required. Identical unkeyed rows remain separate.
+
+`load_embed(invalid_accessions=("999",))` excludes the internal V2 sentinel from
+exam identity by default; pass `()` to disable or supply other values. Such rows
+are retained in `Patient.invalid_accession_records` and `graph.unresolved_records`
+with an `invalid_accession` issue. Missing patient IDs leave them graph-scoped.
+Refresh replaces each addressed patient/input-table snapshot; merge preserves
+it with a diagnostic. Invalid rows never become exams or clinical children.
+Mapped values remain available by semantic `grain.field` names. The supported
+record classes live in `embed_data_graph.clinical.incomplete`.
+
+Exam bindings include `accession_type`, `total_left_findings` (`total_L_find`),
+and `total_right_findings` (`total_R_find`). The patient `cohort_number`
+(`cohort_num`) is an opaque string, with varying observations resolved like
+other patient attributes. Counts are reported values, never recomputed.

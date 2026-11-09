@@ -12,6 +12,7 @@ from embed_data_graph.clinical.histories import (
     PatientHistoryObservation,
     ProcedureHistoryObservation,
 )
+from embed_data_graph.clinical.incomplete import InvalidAccessionRecord
 from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry, UnresolvedClinicalRecord
 from embed_data_graph.core.entity import MutableEntity
 from embed_data_graph.core.graph import ensure_graph
@@ -49,6 +50,9 @@ class Patient(MutableEntity):
     unkeyed_registry_entries : iterable of UnkeyedRegistryEntry, optional
         Registry records of this patient that have no registry ID.
 
+    cohort_number : str or None, optional
+        Opaque source cohort number; default None.
+
     Notes
     -----
     ``exams`` are the registered exams whose owner is this patient; a patient
@@ -61,6 +65,8 @@ class Patient(MutableEntity):
 
     patient_id: str
     """Patient identifier; the key."""
+    cohort_number: Optional[str]
+    """Opaque source cohort number; None when absent or varying."""
     sex: Optional[str]
     """Reported sex when all observations agree; None if absent or varying."""
     race: Optional[str]
@@ -86,15 +92,18 @@ class Patient(MutableEntity):
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
         unkeyed_registry_entries: Optional[Iterable[UnkeyedRegistryEntry]] = None,
+        cohort_number: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.patient_id = patient_id
+        self.cohort_number = cohort_number
         self.sex = sex
         self.birth_year = birth_year
         self.race = race
         self.ethnicity = ethnicity
         self.metadata = dict(metadata or {})
         self.source = source
+        self._invalid_accessions: Dict[str, Tuple[InvalidAccessionRecord, ...]] = {}
         self._attribute_observations: List[PatientAttributeObservation] = []
         self._history_observations: List[PatientHistoryObservation] = []
         for observation in attribute_observations or ():
@@ -122,6 +131,31 @@ class Patient(MutableEntity):
 
         graph = self.graph
         return graph.children(self, "exam") if graph is not None else ()
+
+    @property
+    def invalid_accession_records(self) -> Tuple[InvalidAccessionRecord, ...]:
+        """Patient-scoped rows excluded from exams by invalid accession policy.
+
+        Snapshot records are grouped by source table; no row is an exam or a
+        synthetic clinical identity. Detached/copied patients retain the data.
+        """
+
+        return tuple(item for table in sorted(self._invalid_accessions)
+                     for item in self._invalid_accessions[table])
+
+    @property
+    def claimed_exams(self) -> Tuple["Exam", ...]:
+        """Owned or source-claimed exams, once each in registration order.
+
+        Includes contested exams without assigning ownership. Inspect
+        ``exam.contested`` and ``exam.patient_id`` before attributing results.
+        Returns an empty tuple when detached; objects remain live graph members.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        return _unique([*self.exams, *graph._claimants.get(self.patient_id, {}).values()])
 
     @property
     def findings(self) -> Tuple["Finding", ...]:
@@ -639,6 +673,8 @@ class Patient(MutableEntity):
         return {
             "patient_id": self.patient_id,
             "sex": self.sex,
+            "cohort_number": self.cohort_number,
+            "invalid_accession_records": self.invalid_accession_records,
             "birth_year": self.birth_year,
             "race": self.race,
             "ethnicity": self.ethnicity,
