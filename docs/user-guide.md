@@ -234,6 +234,30 @@ assert patient.attribute_resolution("sex", date(2019, 1, 1)).status.value == "no
 `attribute_resolution` returns the same value with its status: reported, not
 reported, or a conflict between reports on the latest qualifying date.
 
+Intake answers (`menarche_age`, `menopause_age`, `live_births`) are recorded the
+same way, per exam context, with no patient-level scalar because they change
+over time; `live_births` 0 is an explicit no and null is not reported. Body
+measures come from the dated `body_measurements` table, not from MagView
+height and weight, which are unreliable and mostly missing:
+
+```python
+from datetime import date
+
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    body_measurements=[
+        {"empi_anon": "P-30", "collection_date_anon": "2020-02-03", "height_inches": 64, "weight_pounds": 150},
+        {"empi_anon": "P-30", "collection_date_anon": "2022-02-03", "weight_pounds": 158},
+    ]
+).graph
+patient = graph.patient("P-30")
+assert patient is not None
+assert patient.attribute_as_of("weight_pounds", date(2021, 1, 1)) == 150
+assert patient.attribute_as_of("height_inches", date(2023, 1, 1)) == 64
+```
+
 ## Refresh and merge
 
 One invocation is one complete grouped snapshot for each grain it addresses.
@@ -325,8 +349,9 @@ The supported default map is:
 
 | Input | Identity and default bindings |
 | --- | --- |
-| `patients` | `patient_id <- empi_anon`; exam context `acc_anon`/`studydate_anon`; `sex <- GENDER_DESC`; `race <- race`; `ethnicity <- ethnicity`; `birth_year` unbound |
-| `exams` | `accession <- acc_anon`; `patient_id <- empi_anon`; `exam_date <- studydate_anon`; `exam_description <- desc`; `density <- tissueden`; `exam_type <- mg_exam_type`; `visit_type <- vtype`; `modality <- modality_desc`; `patient_age <- age_at_study_anon` |
+| `patients` | `patient_id <- empi_anon`; exam context `acc_anon`/`studydate_anon`; `sex <- GENDER_DESC`; `race <- race`; `ethnicity <- ethnicity`; `birth_year` unbound; intake answers `menarche_age <- menarcheage_anon`, `menopause_age <- menopauseage_anon`, `live_births <- livebirths` (attribute observations only); MagView `height`/`weight` unbound |
+| `exams` | `accession <- acc_anon`; `patient_id <- empi_anon`; `exam_date <- studydate_anon`; `exam_description <- desc`; `density <- tissueden`; `exam_type <- mg_exam_type`; `visit_type <- vtype`; `modality <- modality_desc`; `patient_age <- age_at_study_anon`; `location_id <- loc_num_anon` (opaque) |
+| `body_measurements` | patient `empi_anon`; required date `collection_date_anon`; `height_inches`, `weight_pounds`, `bmi` as dated attribute observations of the same names |
 | `findings` | `(accession, finding_number) <- (acc_anon, numfind)`; `patient_id <- empi_anon`; `laterality <- side` (a supplied null side is bilateral, like `B`); `assessment <- asses`; `recommendation <- recc`; `location <- location`; `depth <- depth`; `distance <- distance` (negative values are exceptional codes, kept raw only); descriptors `massshape`, `massmargin`, `massdens`, `calcfind`, `calcdistri`, `calcnumber`, `otherfind`, `implanfind` into `finding.descriptors` as source codes; the legacy derived flags `mass`, `asymmetry`, `arch_distortion` and `calc` are unbound |
 | `images` | source path `anon_dicom_path`; patient/accession `empi_anon`/`acc_anon`; laterality/view `ImageLateralityFinal`/`ViewPosition`; modality `Modality`; derived type `FinalImageType`; dimensions `Rows`/`Columns`; frames `ImagesInAcquisition` (DBT images only); study/series UIDs from the path; `manufacturer <- Manufacturer`; `series_description <- SeriesDescription`; `dicom_image_type <- ImageType`; `view_modifier <- 0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning`; `spot_magnification <- spot_mag` |
 | `rois` | source path `anon_dicom_path`; coordinates `ROI_coords`; frame facts `ROI_frames`; depth flag `ROI_depth_derived` |

@@ -109,10 +109,21 @@ present or loaded by admitted image rows. A row that addresses no patient or
 exam is not loaded. Skipped rows are counted in one INFO issue per table with
 code `rows_outside_graph` and context `{"table": ..., "rows": ...}`.
 
+Body measures load from `body_measurements` (EMBED `magview_bmi_anon`), which
+has no accession: each supplied `height_inches`, `weight_pounds` and `bmi`
+(kg/m²) value is a `PatientAttributeObservation` of that name with no accession,
+dated by `collection_date_anon`. Refresh replaces an addressed patient's series
+for each supplied measure; merge adds dates and turns a value that disagrees
+with the stored one into None with `conflicting_body_measurement`, as it does
+for same-day disagreement. Non-numeric values are dropped with
+`body_measurement_numeric_parse`. `Patient.replace_attribute_history` replaces
+one attribute's observations directly. MagView height and weight are not bound.
+
 Managed fields by grain (bound mapped fields only): patient sex/birth_year, recorded
 per exam context as attribute observations (a row without the date column
-addresses its accession's one dated context);
-exam exam_date/description; finding laterality/finding_type/interpretation/anatomy,
+addresses its accession's one dated context), plus menarche_age, menopause_age and
+live_births as attribute observations without a patient scalar;
+exam exam_date/description/location_id (an opaque identifier); finding laterality/finding_type/interpretation/anatomy,
 source anatomy codes/descriptors/record_type; image laterality/view/modality,
 source modality/derived type, dimensions/frame_count, study/series IDs and coordinate
 frame; procedure non-key adapter payload; pathology diagnosis/result_category,

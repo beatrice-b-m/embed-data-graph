@@ -108,6 +108,9 @@ class Exam(MutableEntity):
         Consumer metadata, copied into a dict.
     source : SourceRef or None, optional
         Row the exam was read from.
+    location_id : str or None, optional
+        Opaque identifier of the exam location (EMBED ``loc_num_anon``); no
+        site, facility or ordering is implied. Default None.
 
     Notes
     -----
@@ -150,6 +153,8 @@ class Exam(MutableEntity):
     """Exam modality and its meaning."""
     patient_age: Optional[float]
     """Patient age in years at the exam; EMBED top-codes ages of 90 or more to 89."""
+    location_id: Optional[str]
+    """Opaque exam-location identifier; no site or ordering is implied."""
     asserted_patient_ids: Set[str]
     """Source patient claims; not a choice of owner."""
     linked_accessions: Set[str]
@@ -178,6 +183,7 @@ class Exam(MutableEntity):
         owner_explicit: bool = False,
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
+        location_id: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.accession_number = accession_number
@@ -195,6 +201,7 @@ class Exam(MutableEntity):
         self.visit_type = Code.coerce(visit_type)
         self.modality = Code.coerce(modality)
         self.patient_age = patient_age
+        self.location_id = location_id
         self.linked_accessions = set(linked_accessions or ())
         self.registry_references = set(registry_references or ())
         self._owner_explicit = bool(owner_explicit)
@@ -390,6 +397,7 @@ class Exam(MutableEntity):
             "visit_type": self.visit_type,
             "modality": self.modality,
             "patient_age": self.patient_age,
+            "location_id": self.location_id,
             "linked_accessions": self.linked_accessions,
             "registry_references": self.registry_references,
             "metadata": self.metadata,
