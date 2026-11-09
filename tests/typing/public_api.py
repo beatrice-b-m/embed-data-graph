@@ -4,8 +4,10 @@ from typing import Optional, Tuple
 from typing_extensions import assert_type
 
 from embed_data_graph import (
+    DbtForm, ViewModification, ViewPosition,
     DatasetGraph, Exam, Finding, Laterality, LoadReport,
-    MammogramImage, Patient, Pathology, RegionOfInterest, load_embed,
+    CancerRegistryEntry, MammogramImage, Patient, Pathology, RegionOfInterest,
+    UnkeyedRegistryEntry, UnresolvedClinicalRecord, load_embed,
 )
 from embed_data_graph.core.selection import Selection
 from embed_data_graph.clinical.attributes import AttributeResolution
@@ -56,3 +58,16 @@ assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
 assert_type(Patient("P").attribute_resolution("sex", date(2020, 1, 1)), AttributeResolution)
 assert_type(Patient("P").history_as_of(date(2020, 1, 1), kind="procedure"), Tuple[PatientHistoryObservation, ...])
+assert_type(MammogramImage("I").dbt_form, Optional[DbtForm])
+assert_type(MammogramImage("I").view_modification, ViewModification)
+assert_type(MammogramImage("I").recovered_view_position, ViewPosition)
+assert_type(MammogramImage("I", spot_magnification=True).spot_magnification, Optional[bool])
+assert_type(Exam("C").imaged_laterality, Laterality)
+assert_type(Patient("P").registry_entries, Tuple[CancerRegistryEntry, ...])
+assert_type(Patient("P").unkeyed_registry_entries, Tuple[UnkeyedRegistryEntry, ...])
+assert_type(
+    Patient("P").set_unkeyed_registry_entries([UnkeyedRegistryEntry({"site": "C50"})]),
+    Tuple[UnkeyedRegistryEntry, ...],
+)
+assert_type(Patient("P").unresolved_clinical_records, Tuple[UnresolvedClinicalRecord, ...])
+assert_type(Patient("P").procedures[0].identity.laterality, Laterality)

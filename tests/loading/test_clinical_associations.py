@@ -39,7 +39,7 @@ def test_registry_arrival_orders(order):
             load(graph, magview=[row(cancer_outcome_registry_id="7")] * 3)
             assert graph.exam("A").registry_references == {("P", "7")}
         else:
-            load(graph, registry=[{"empi_anon": "P", "cancer_registry_id": "7"}])
+            load(graph, registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7"}])
     assert graph.exam("A").registry_entries == (
         graph.registry_entry("P", "7"),
     )
@@ -48,7 +48,7 @@ def test_registry_arrival_orders(order):
 def test_registry_patient_scope_sharing_and_source_disagreement():
     graph = DatasetGraph()
     load(
-        graph, registry=[{"empi_anon": p, "cancer_registry_id": 7} for p in ("P", "Q")]
+        graph, registry=[{"empi_anon": p, "cancer_outcome_registry_id": 7} for p in ("P", "Q")]
     )
     load(
         graph,
@@ -170,7 +170,7 @@ def test_registry_payload_is_explicit_and_refreshes_only_bound_fields():
     graph = DatasetGraph()
     load(
         graph,
-        registry=[{"empi_anon": "P", "cancer_registry_id": "7", "secret": "unused"}],
+        registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7", "secret": "unused"}],
     )
     obj = graph.registry_entry("P", "7")
     assert dict(obj.payload) == {}
@@ -179,18 +179,18 @@ def test_registry_payload_is_explicit_and_refreshes_only_bound_fields():
     load(
         graph,
         columns=columns,
-        registry=[{"empi_anon": "P", "cancer_registry_id": "7", "dx": "supplied"}],
+        registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7", "dx": "supplied"}],
     )
     assert graph.registry_entry("P", "7") is obj
     assert obj.payload["diagnosis"] == "supplied"
     load(
-        graph, columns=columns, registry=[{"empi_anon": "P", "cancer_registry_id": "7"}]
+        graph, columns=columns, registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7"}]
     )
     assert obj.payload["diagnosis"] == "supplied"
     load(
         graph,
         columns=columns,
-        registry=[{"empi_anon": "P", "cancer_registry_id": "7", "dx": None}],
+        registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7", "dx": None}],
     )
     assert obj.payload["diagnosis"] is None
 
@@ -241,7 +241,7 @@ def test_registry_assignment_resolves_when_the_entry_arrives_later():
     exam = graph.register(Exam("A"))
     graph.set_registry_assignments(exam, [("P", "7")])
     assert graph.unresolved_references
-    load(graph, registry=[{"empi_anon": "P", "cancer_registry_id": "7"}])
+    load(graph, registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "7"}])
     assert exam.registry_entries == (graph.registry_entry("P", "7"),)
     assert not graph.unresolved_references
 
@@ -254,3 +254,110 @@ def test_procedure_before_finding_resolves_and_exam_fallback_is_supported():
     assert graph.finding("A", "1").procedures[0] is graph.procedures[0]
     load(graph, procedures=[clinical_row(numfind=None, procdate_anon="2021-01-01")])
     assert len(graph.exam("A").procedures) == 2
+
+
+def registry_row(registry_id=None, **fields):
+    return {"empi_anon": "P", "cancer_outcome_registry_id": registry_id, **fields}
+
+
+def test_registry_identity_defaults_to_the_magview_pointer_column():
+    graph = DatasetGraph()
+    load(graph, magview=[row(cancer_outcome_registry_id="7")], registry=[registry_row("7")])
+
+    assert graph.exam("A").registry_entries == (graph.registry_entry("P", "7"),)
+
+
+def test_patient_registry_entries_include_entries_no_exam_is_assigned_to():
+    graph = DatasetGraph()
+    load(graph, magview=[row(cancer_outcome_registry_id="7")], registry=[registry_row("7"), registry_row("8")])
+
+    patient = graph.patient("P")
+
+    assert patient.registry_entries == (graph.registry_entry("P", "7"), graph.registry_entry("P", "8"))
+    assert graph.registry_entry("P", "8").exams == ()
+    assert Patient("P").registry_entries == ()
+
+
+def test_patient_registry_entries_follow_rekey_and_removal():
+    graph = DatasetGraph()
+    graph.register(Patient("P"))
+    load(graph, registry=[registry_row("7")])
+    entry = graph.registry_entry("P", "7")
+    assert graph.patient("P").registry_entries == (entry,)
+
+    entry.rekey(patient_id="Q")
+    assert graph.patient("P").registry_entries == ()
+    assert graph.register(Patient("Q")).registry_entries == (entry,)
+
+    graph.remove(entry)
+    assert graph.patient("Q").registry_entries == ()
+
+
+def test_registry_rows_without_an_id_load_as_unkeyed_patient_records():
+    graph = DatasetGraph()
+    columns = {"registry": {"diagnosis": "dx"}}
+
+    issues = load(graph, columns=columns, registry=[registry_row(dx="first"), registry_row(dx="second"), registry_row("7")])
+
+    patient = graph.patient("P")
+    assert [entry.payload for entry in patient.unkeyed_registry_entries] == [{"diagnosis": "first"}, {"diagnosis": "second"}]
+    assert patient.registry_entries == (graph.registry_entry("P", "7"),)
+    assert len(graph.registry_entries) == 1
+    assert "incomplete_registry_identity" not in {issue.code for issue in issues}
+    (info,) = [issue for issue in issues if issue.code == "unkeyed_registry_entries"]
+    assert info.context["rows"] == 2
+
+
+def test_registry_rows_create_the_patient_that_owns_unkeyed_records():
+    graph = DatasetGraph()
+
+    load(graph, registry=[registry_row()])
+
+    assert len(graph.patient("P").unkeyed_registry_entries) == 1
+
+
+def test_registry_rows_without_a_patient_are_still_rejected():
+    graph = DatasetGraph()
+
+    issues = load(graph, registry=[{"empi_anon": None, "cancer_outcome_registry_id": None}])
+
+    assert graph.patients == () and graph.registry_entries == ()
+    assert "incomplete_registry_identity" in {issue.code for issue in issues}
+
+
+def test_refresh_replaces_each_addressed_patients_unkeyed_snapshot():
+    graph = DatasetGraph()
+    columns = {"registry": {"diagnosis": "dx"}}
+    load(graph, columns=columns, registry=[registry_row(dx="old"), {"empi_anon": "Q", "cancer_outcome_registry_id": None}])
+
+    load(graph, columns=columns, registry=[registry_row(dx="new")])
+    assert [entry.payload["diagnosis"] for entry in graph.patient("P").unkeyed_registry_entries] == ["new"]
+    assert len(graph.patient("Q").unkeyed_registry_entries) == 1
+
+    # Once a patient's rows all carry IDs, the stale unkeyed records go.
+    load(graph, columns=columns, registry=[registry_row("7", dx="new")])
+    assert graph.patient("P").unkeyed_registry_entries == ()
+
+
+def test_merge_preserves_unkeyed_records_and_reports_the_rows():
+    graph = DatasetGraph()
+    load(graph, registry=[registry_row()])
+    stored = graph.patient("P").unkeyed_registry_entries
+
+    issues = load(graph, mode="merge", registry=[registry_row(), registry_row("7")])
+
+    assert graph.patient("P").unkeyed_registry_entries == stored
+    assert graph.registry_entry("P", "7") is not None
+    (warning,) = [issue for issue in issues if issue.code == "registry_merge_requires_registry_id"]
+    assert warning.context == {"patient_id": "P", "rows": 1}
+
+
+def test_unkeyed_registry_records_travel_with_patient_partitions_and_export():
+    graph = DatasetGraph()
+    load(graph, registry=[registry_row()])
+
+    part = graph.partition(level="patient", key=lambda patient: patient.patient_id)["P"]
+
+    copied = part.patient("P").unkeyed_registry_entries
+    assert len(copied) == 1 and copied[0] is not graph.patient("P").unkeyed_registry_entries[0]
+    assert part.to_dict()["patient"][0]["unkeyed_registry_entries"] == [{"payload": {}, "source": None}]
