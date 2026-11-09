@@ -108,8 +108,8 @@ def story_tables() -> Dict[str, List[Dict[str, Any]]]:
             if view == "CC" and any(f_side == side and code in FLAGGED for _, f_side, code in findings):
                 image["ROI_coords"] = ROI
             images.append(image)
-    registry = [{"empi_anon": patient, "cancer_registry_id": entry} for patient, entry in REGISTRY.values()]
-    registry.append({"empi_anon": UNASSIGNED_REGISTRY[0], "cancer_registry_id": UNASSIGNED_REGISTRY[1]})
+    registry = [{"empi_anon": patient, "cancer_outcome_registry_id": entry} for patient, entry in REGISTRY.values()]
+    registry.append({"empi_anon": UNASSIGNED_REGISTRY[0], "cancer_outcome_registry_id": UNASSIGNED_REGISTRY[1]})
     return {"magview": magview, "images": images, "registry": registry}
 
 

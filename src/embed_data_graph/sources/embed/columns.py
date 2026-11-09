@@ -2,10 +2,13 @@
 
 The maps bind only source facts that are established at this adapter boundary.
 Every bound default names a column that exists in the internal EMBED MagView,
-patient body-measurement or V1c image-metadata tables; semantic fields without such a column default to
+patient-history, body-measurement or V1c image-metadata tables; semantic fields without such a column default to
 None and can be bound explicitly through ``columns``.
 In particular, registry payload fields and future image identity fields remain
 explicitly configurable instead of being guessed from similarly named columns.
+Columns derived by a legacy rule rather than recorded at the source, such as
+the MagView ``mass``, ``asymmetry``, ``arch_distortion`` and ``calc`` flags,
+are unbound by default; bind them explicitly to load them as legacy values.
 MagView ``height`` and ``weight`` are unreliable and mostly missing, so they
 are not bound; the dated body-measurement table is the canonical source.
 """
@@ -62,10 +65,13 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "depth": "depth",
                 "distance": "distance",
                 "record_type": None,
-                "mass": "mass",
-                "asymmetry": "asymmetry",
-                "architectural_distortion": "arch_distortion",
-                "calcification": "calc",
+                # MagView mass, asymmetry, arch_distortion and calc were
+                # computed by a legacy labeling rule, not recorded by
+                # radiologists, so they are not bound as source flags.
+                "mass": None,
+                "asymmetry": None,
+                "architectural_distortion": None,
+                "calcification": None,
                 "mass_shape": "massshape",
                 "mass_margin": "massmargin",
                 "mass_density": "massdens",
@@ -94,6 +100,11 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "study_instance_uid": None,
                 "series_instance_uid": None,
                 "coordinate_frame_id": None,
+                "manufacturer": "Manufacturer",
+                "series_description": "SeriesDescription",
+                "dicom_image_type": "ImageType",
+                "view_modifier": "0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning",
+                "spot_magnification": "spot_mag",
             }
         ),
         "rois": MappingProxyType(
@@ -148,6 +159,27 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
                 "bmi": "bmi",
             }
         ),
+        "cancer_history": MappingProxyType(
+            {
+                "patient_id": "empi_anon",
+                "record_id": None,
+                "accession": "acc_anon",
+                "subject": "patient",
+                "relationship": "rel",
+                "category": "type",
+                "cancer_code": "cancercode",
+                "side": "side",
+                "bilateral": "bilat",
+                "premenopausal": "premen",
+                "diagnosis_age": "diag_age",
+                "diagnosis_month": "month",
+                "diagnosis_year": "year",
+                "current_age": "curr_age",
+                "brca1": "brca1",
+                "brca2": "brca2",
+                "comment": "comment",
+            }
+        ),
         "procedures": MappingProxyType(
             {
                 "patient_id": "empi_anon",
@@ -179,7 +211,7 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
         "registry": MappingProxyType(
             {
                 "patient_id": "empi_anon",
-                "registry_id": "cancer_registry_id",
+                "registry_id": "cancer_outcome_registry_id",
                 "record_id": None,
                 "diagnosis": None,
                 "result_category": None,
@@ -213,6 +245,7 @@ _REQUIRED = {
     "hormone_history": frozenset({"patient_id", "category", "medication"}),
     "procedure_history": frozenset({"patient_id", "category", "procedure"}),
     "body_measurements": frozenset({"patient_id", "measured_date"}),
+    "cancer_history": frozenset({"patient_id"}),
     "procedures": frozenset(
         {"patient_id", "performed_date", "procedure_type", "laterality"}
     ),

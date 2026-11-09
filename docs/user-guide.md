@@ -92,7 +92,22 @@ the same exam or breast side are separate facts; the core does not infer a
 finding-to-image or finding-to-ROI association from shared scope.
 
 Collections such as `patient.exams`, `exam.findings`, `image.rois`, and
-`exam.breast_sides` are computed on access from the graph's indexes. Use
+`exam.breast_sides` are computed on access from the graph's indexes.
+`exam.breast_sides` lists the sides that have a finding or image;
+`exam.imaged_laterality` instead says which breasts the exam imaged, derived
+from the exam description alone, never from findings or images:
+
+```python
+from embed_data_graph import Exam, Laterality
+
+
+imaged = Exam("A-010", description="MG Diagnostic Left w/ Tomo").imaged_laterality
+assert imaged is Laterality.LEFT and imaged.expand() == (Laterality.LEFT,)
+assert Exam("A-011", description="MG Screening").imaged_laterality is Laterality.UNKNOWN
+```
+
+The description is searched for `bil`, then `left`, then `right`, ignoring
+case; one that names none of them leaves the laterality UNKNOWN. Use
 `add_*`, `attach`, `detach`, `replace_rois`, or an update of the stored keys to
 change them. Changing a key (with `rekey`, `update` or plain assignment) is
 propagated to every object that stored the old key, after checking the whole
@@ -213,7 +228,11 @@ patient = load_embed(magview=rows).graph.patient("P-9")
 assert patient.sex is None
 assert patient.attribute_as_of("sex", date(2021, 1, 1)) == "F"
 assert [item.value for item in patient.attribute_history("sex")] == ["F", "U"]
+assert patient.attribute_resolution("sex", date(2019, 1, 1)).status.value == "not_reported"
 ```
+
+`attribute_resolution` returns the same value with its status: reported, not
+reported, or a conflict between reports on the latest qualifying date.
 
 Intake answers (`menarche_age`, `menopause_age`, `live_births`) are recorded the
 same way, per exam context, with no patient-level scalar because they change
@@ -333,18 +352,47 @@ The supported default map is:
 | `patients` | `patient_id <- empi_anon`; exam context `acc_anon`/`studydate_anon`; `sex <- GENDER_DESC`; `race <- race`; `ethnicity <- ethnicity`; `birth_year` unbound; intake answers `menarche_age <- menarcheage_anon`, `menopause_age <- menopauseage_anon`, `live_births <- livebirths` (attribute observations only); MagView `height`/`weight` unbound |
 | `exams` | `accession <- acc_anon`; `patient_id <- empi_anon`; `exam_date <- studydate_anon`; `exam_description <- desc`; `density <- tissueden`; `exam_type <- mg_exam_type`; `visit_type <- vtype`; `modality <- modality_desc`; `patient_age <- age_at_study_anon`; `location_id <- loc_num_anon` (opaque) |
 | `body_measurements` | patient `empi_anon`; required date `collection_date_anon`; `height_inches`, `weight_pounds`, `bmi` as dated attribute observations of the same names |
-| `findings` | `(accession, finding_number) <- (acc_anon, numfind)`; `patient_id <- empi_anon`; `laterality <- side` (a supplied null side is bilateral, like `B`); `assessment <- asses`; `recommendation <- recc`; `location <- location`; `depth <- depth`; `distance <- distance` (negative values are exceptional codes, kept raw only); descriptors `mass`, `asymmetry`, `arch_distortion`, `calc`, `massshape`, `massmargin`, `massdens`, `calcfind`, `calcdistri`, `calcnumber`, `otherfind`, `implanfind` into `finding.descriptors` as source codes |
-| `images` | source path `anon_dicom_path`; patient/accession `empi_anon`/`acc_anon`; laterality/view `ImageLateralityFinal`/`ViewPosition`; modality `Modality`; derived type `FinalImageType`; dimensions `Rows`/`Columns`; frames `ImagesInAcquisition` (DBT images only); study/series UIDs from the path |
+| `findings` | `(accession, finding_number) <- (acc_anon, numfind)`; `patient_id <- empi_anon`; `laterality <- side` (a supplied null side is bilateral, like `B`); `assessment <- asses`; `recommendation <- recc`; `location <- location`; `depth <- depth`; `distance <- distance` (negative values are exceptional codes, kept raw only); descriptors `massshape`, `massmargin`, `massdens`, `calcfind`, `calcdistri`, `calcnumber`, `otherfind`, `implanfind` into `finding.descriptors` as source codes; the legacy derived flags `mass`, `asymmetry`, `arch_distortion` and `calc` are unbound |
+| `images` | source path `anon_dicom_path`; patient/accession `empi_anon`/`acc_anon`; laterality/view `ImageLateralityFinal`/`ViewPosition`; modality `Modality`; derived type `FinalImageType`; dimensions `Rows`/`Columns`; frames `ImagesInAcquisition` (DBT images only); study/series UIDs from the path; `manufacturer <- Manufacturer`; `series_description <- SeriesDescription`; `dicom_image_type <- ImageType`; `view_modifier <- 0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning`; `spot_magnification <- spot_mag` |
 | `rois` | source path `anon_dicom_path`; coordinates `ROI_coords`; frame facts `ROI_frames`; depth flag `ROI_depth_derived` |
 | `procedures` | identity `(empi_anon, procdate_anon, type, bside)`; optional accession/finding `(acc_anon, numfind)` |
 | `pathology` | optional record ID, otherwise the procedure `(empi_anon, procdate_anon, type, bside)`; attachment `(acc_anon, numfind)`; procedure date `procdate_anon`; report date `pdate_anon`; severity `path_severity`; descriptors `path1` through `path10`; `diagnosis`, `result_category` and `malignant` unbound |
 | `hormone_history` | patient `empi_anon`; category/code `type`/`code`; accession `acc_anon`; timing `first_age`, `mfirst`, `yfirst`, `last_age`, `mlast`, `ylast` |
 | `procedure_history` | patient `empi_anon`; category/procedure `type`/`pcode`; accession `acc_anon`; laterality `side`; result `result` |
-| `registry` | required patient/entry identity `empi_anon`/`cancer_registry_id`; payload is unbound by default |
+| `cancer_history` | patient `empi_anon`; accession `acc_anon`; subject `patient` (1 patient, 0 relative); relationship `rel`; category/code `type`/`cancercode` (source codes, no meanings); raw text `side`, `bilat`, `premen`, `diag_age`, `month`, `year`, `curr_age`, `brca1`, `brca2`, `comment` |
+| `registry` | patient/entry identity `empi_anon`/`cancer_outcome_registry_id` (a row without the entry ID is an unkeyed patient record); payload is unbound by default |
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
 `DEFAULT_COLUMNS` is the authoritative mapping object; the table above is a
-quick reference. The registry identity binding is deliberately narrower than
+quick reference. Image rows keep the manufacturer, series description and
+ImageType as recorded, and derive the DBT form and whether a view is modified:
+
+```python
+from embed_data_graph import DbtForm, ViewModification, load_embed
+
+
+(image,) = load_embed(
+    images=[
+        {
+            "anon_dicom_path": "cohort1/P-004/S/SE/U-004.dcm", "acc_anon": "A-004",
+            "FinalImageType": "3D", "Manufacturer": "HOLOGIC, Inc.",
+            "SeriesDescription": "L CC Tomosynthesis Projection",
+            "ViewPosition": "CC", "ImageLateralityFinal": "L",
+        }
+    ]
+).graph.images
+assert image.dbt_form is DbtForm.PROJECTION
+assert image.view_modification is ViewModification.STANDARD
+```
+
+A spot or magnification view loads with its base `view_position` but
+`view_modification` MODIFIED, so it stays out of standard CC and MLO coverage.
+
+The MagView `mass`, `asymmetry`, `arch_distortion` and `calc`
+columns were computed by a legacy labeling rule rather than recorded by
+radiologists, so they are not loaded as source flags. To load them as legacy
+values, bind the `findings` fields `mass`, `asymmetry`,
+`architectural_distortion` and `calcification` explicitly. The registry identity binding is deliberately narrower than
 the rest of its possible payload. Map additional registry payload fields only
 when their source meanings are established.
 
@@ -374,7 +422,7 @@ graph = load_embed(
             "linkedaccession_anon": "B-001",
         }
     ],
-    registry=[{"empi_anon": "P-001", "cancer_registry_id": 7}],
+    registry=[{"empi_anon": "P-001", "cancer_outcome_registry_id": 7}],
 ).graph
 
 exam = graph.exam("A-001")
@@ -394,16 +442,69 @@ association preserves the existing set, a null clears it, and a supplied set
 replaces it. A registry entry is patient-scoped and can be assigned to several
 exams. A registry ID by itself does not create a diagnosis.
 
+Every registry row is a registry record of its patient, including rows that no
+MagView pointer reaches and rows without a registry ID:
+
+```python
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    registry=[
+        {"empi_anon": "P-002", "cancer_outcome_registry_id": 3},
+        {"empi_anon": "P-002", "cancer_outcome_registry_id": None},
+    ],
+).graph
+
+patient = graph.patient("P-002")
+assert patient is not None
+assert patient.registry_entries == (graph.registry_entry("P-002", "3"),)
+assert len(patient.unkeyed_registry_entries) == 1
+```
+
+`patient.registry_entries` lists the keyed entries that name the patient
+whether or not an exam is assigned to them. Rows without a registry ID are
+`UnkeyedRegistryEntry` values in `patient.unkeyed_registry_entries`: no exam is
+assigned to them, and refresh replaces the patient's unkeyed records while merge
+preserves them.
+
 Verified `procedures` use the complete identity `(patient_id, performed_date,
 procedure_type, laterality)`. Incomplete records remain accessible through
-`graph.unresolved_records` rather than becoming one procedure per physical row.
+`graph.unresolved_records` rather than becoming one procedure per physical row,
+and the patient their row names reaches them as typed records:
+
+```python
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    magview=[
+        {
+            "empi_anon": "P-003", "acc_anon": "A-003", "numfind": 1, "side": "L",
+            "procdate_anon": "2021-04-02", "type": "B", "bside": None,
+            "path_severity": 0,
+        }
+    ],
+).graph
+
+patient = graph.patient("P-003")
+assert patient is not None
+(pathology,) = [r for r in patient.unresolved_clinical_records if r.kind == "pathology"]
+assert pathology.severity is not None and pathology.severity.name == "INVASIVE_BREAST_CANCER"
+assert pathology.laterality.value == "UNKNOWN"  # never the finding side
+```
 Pathology prefers a supplied patient-scoped record ID. Without one, the
 documented attachment plus report-documentation-date fallback is used; an
 ambiguous or insufficient key remains unresolved. Descriptor slots retain
 order and duplicate values. A report date is not substituted for the procedure
 date or a diagnosis event date.
 
-`hormone_history` and `procedure_history` are patient-owned reported facts.
+`hormone_history`, `procedure_history` and `cancer_history` are patient-owned
+reported facts. `cancer_history` entries (`patient.cancer_history`) record
+whether they are about the patient or a relative (`about_relative`); relative
+history is never the patient's own diagnosis. Their relationship, category and
+cancer codes keep source codes without meanings, because those dictionaries
+are provisional, and BRCA, side and timing fields stay raw text.
 They are distinct from performed procedures. Their category, code and result
 are `Code` values, and a code is decoded within its category, so `O` under
 hormone `H` reads "Other hormone" but under contraceptive `O` reads "Other
@@ -411,6 +512,25 @@ contraceptive". Identified history rows refresh
 their existing object in place. Without an event ID, refresh replaces that
 history kind as a patient snapshot; merge requires explicit record IDs and
 preserves existing unkeyed facts while reporting the limitation.
+
+History is captured at the intake of its context exam, so select it as of a
+date with `history_as_of`:
+
+```python
+from datetime import date
+
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    exams=[{"acc_anon": "A-20", "empi_anon": "P-20", "studydate_anon": "2020-06-01"}],
+    procedure_history=[{"empi_anon": "P-20", "acc_anon": "A-20", "type": "B", "pcode": "1"}],
+).graph
+patient = graph.patient("P-20")
+assert patient is not None
+assert patient.history_as_of(date(2020, 5, 31)) == ()
+assert len(patient.history_as_of(date(2020, 6, 1), kind="procedure")) == 1
+```
 
 ## Images and ROI collections
 

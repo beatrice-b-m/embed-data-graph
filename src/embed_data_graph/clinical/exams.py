@@ -48,6 +48,25 @@ class BreastSide:
     """Images of this side."""
 
 
+def _description_laterality(description: Optional[str]) -> Laterality:
+    """Return the breasts an exam description names, checked in a fixed order.
+
+    The description is lowercased and searched for substrings: ``bil`` means
+    BILATERAL, otherwise ``left`` means LEFT, otherwise ``right`` means RIGHT,
+    otherwise UNKNOWN. The order settles descriptions that name several sides;
+    this is the rule the EMBED cohort pipelines have used on ``desc``.
+    """
+
+    text = (description or "").lower()
+    if "bil" in text:
+        return Laterality.BILATERAL
+    if "left" in text:
+        return Laterality.LEFT
+    if "right" in text:
+        return Laterality.RIGHT
+    return Laterality.UNKNOWN
+
+
 class Exam(MutableEntity):
     """A breast-imaging exam, keyed by accession number.
 
@@ -282,6 +301,31 @@ class Exam(MutableEntity):
 
         graph = self.graph
         return graph.linked_exams(self) if graph is not None else ()
+
+    @property
+    def imaged_laterality(self) -> Laterality:
+        """Which breasts this exam imaged, derived from its description on each access.
+
+        No EMBED column records the imaged breasts. The description is
+        searched case-insensitively for substrings in order: ``bil`` is
+        BILATERAL, else ``left`` is LEFT, else ``right`` is RIGHT, else
+        UNKNOWN. Findings and images are never used: a finding side lists a
+        breast with a finding, and image metadata may cover only part of an
+        exam. UNKNOWN never defaults to a side; ``imaged_laterality.expand()``
+        gives the imaged sides, or () when unknown.
+
+        Unlike ``breast_sides``, a finding-free imaged breast is included and
+        a finding does not make a breast imaged.
+
+        Examples
+        --------
+        >>> Exam("A1", description="MG Diagnostic Left w/ Tomo").imaged_laterality
+        <Laterality.LEFT: 'L'>
+        >>> Exam("A2", description="MG Screening Bilateral").imaged_laterality.expand()
+        (<Laterality.LEFT: 'L'>, <Laterality.RIGHT: 'R'>)
+        """
+
+        return _description_laterality(self.description)
 
     @property
     def breast_sides(self) -> Mapping[Laterality, BreastSide]:

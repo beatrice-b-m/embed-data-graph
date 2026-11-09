@@ -164,6 +164,20 @@ attachment the adapter could establish, never keyed by a row position. When rows
 of one procedure disagree on a descriptor slot, the bundle is unresolved because
 only a record ID could tell the reports apart. Within an addressed attachment's
 refresh, unresolved snapshots replace earlier ones; no replay ledger accumulates.
+A pathology row also addresses its own exam or finding, so a corrected row that
+now resolves clears what an earlier incomplete row left there.
+
+Each unresolved entry carries a typed `record`, an `UnresolvedClinicalRecord`
+with the reported patient, procedure date, type and side, and for pathology the
+severity, raw severity, report date and descriptor slots. Missing parts stay
+missing: an unreported procedure side is `Laterality.UNKNOWN` and is never taken
+from the finding side. A row without an accession is kept under
+`("patient", patient_id)` rather than unattached. `patient.unresolved_clinical_records`
+lists the records whose rows name the patient, so a cancer result on a
+procedure without a side, date or type is reachable from the patient, with its
+`incomplete_procedure_identity` or `incomplete_pathology_identity` issue naming
+the patient. `patient.procedures` and `patient.pathology` likewise include
+resolved procedures and bundles that name the patient but no exam reaches.
 
 `path_severity` loads as `PathologySeverity`, an inverse scale on which 0 is
 invasive breast cancer and 5 non-breast cancer; code 6 is invalid and kept only
@@ -173,13 +187,49 @@ benign result.
 History observations with an explicit record ID are updated in place on reload.
 Without one they are snapshots of reported facts: never performed procedures and
 never inferred distinct events. Patient attribute observations record one value
-per exam context; choose among them with `Patient.attribute_as_of`.
+per exam context; choose among them with `Patient.attribute_as_of`, or with
+`Patient.attribute_resolution`, which returns an `AttributeResolution` whose
+`status` (`AttributeStatus` in `embed_data_graph.clinical.attributes`) tells a
+value that was never reported (`NOT_REPORTED`) from one whose latest qualifying
+reports disagree (`CONFLICT`), with that date and its `candidates`. Neither falls
+back to an earlier agreeing value; reduce `attribute_history` for that.
+
+`cancer_history` rows load as `CancerHistoryObservation` values
+(`embed_data_graph.clinical.histories`) with the same snapshot, record-ID and
+merge rules as the other history tables, read through `patient.cancer_history`
+or the history kind `"cancer"`. The subject flag decodes to `about_relative`
+(1 is the patient, 0 a relative; another value is None with an
+`unknown_cancer_history_subject` warning). Relationship, category and cancer
+codes are uppercased source codes without meanings; side, bilateral,
+premenopausal, age, month, year, BRCA and comment fields are raw text and are
+never decoded as results.
+
+Reported history is captured at the intake of its context exam, so
+`Patient.history_known_on(observation)` is the context exam's date, looked up
+on each call so exams may load before or after the history.
+`Patient.history_as_of(date, kind=None)` returns the facts known on or before
+the date and leaves out those without a resolvable date: no context accession,
+a context exam that is not loaded, owned or claimed by another patient, or
+without an ISO date. A load reports the first, third and fourth cases once per
+call as the WARNING `history_known_on_unresolved` with counts by reason; an
+exam not yet loaded is not reported because a later load can resolve it. The
+known-on date is not when the reported event happened.
 
 The eight graph entities are Patient, Exam, Finding, Procedure, Pathology,
 CancerRegistryEntry, MammogramImage and RegionOfInterest. Interpretations and
-history observations are mutable values stored on their entity. BreastSide,
+history observations and unkeyed registry entries are mutable values stored on
+their entity. BreastSide,
 ProcedureIdentity, PatientAttributeObservation, PathologyObservation,
 ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values.
+
+`exam.imaged_laterality` is the `Laterality` of the breasts an exam imaged:
+LEFT, RIGHT, BILATERAL or UNKNOWN, with `.expand()` giving the sides. No EMBED
+column records it. The exam description is searched case-insensitively for the
+substrings `bil` (BILATERAL), else `left` (LEFT), else `right` (RIGHT), else it
+is UNKNOWN; the order settles descriptions that name several sides. Finding
+sides and image laterality are never used: findings list breasts with a finding,
+and image metadata may cover only part of an exam. UNKNOWN never defaults to a
+side. It is computed on each access.
 
 ## Imaging and supplied association collections
 
@@ -198,6 +248,33 @@ and no `<SOP>.dcm` filename is dropped with `unresolved_image_identity`. Derivat
 An update or rekey that would give two original images the same source SOP raises
 ValueError before changing fields or source indexes. The check uses the proposed
 UID and derivation state together, including a derivative becoming an original.
+
+Image rows also load `manufacturer` (`Manufacturer`), `series_description`
+(`SeriesDescription`), `dicom_image_type` (`ImageType`, serialized as recorded),
+`view_modifier` (the first view-modifier code meaning) and `spot_magnification`
+(`spot_mag`: 1 is True and 0 False; anything else is None with an
+`image_flag_parse` issue; None is not a negative determination). The supplied
+view text is kept, trimmed and uppercased, as `source_view_position`; coercion to
+`view_position` is unchanged and a null `ImageLateralityFinal` still loads as
+UNKNOWN. Three properties are derived on access:
+
+- `dbt_form` is `DbtForm.PROJECTION` or `RECONSTRUCTION` for a DBT image when
+  the series-description words or ImageType tokens name exactly one form (for
+  example `Tomosynthesis Projection` or `TOMO_PROJ`); naming both is
+  `UNKNOWN`. Hologic projections always say so in their series description, so
+  a Hologic DBT image whose series description names no form is a
+  `RECONSTRUCTION`. Other manufacturers' images that name no form, and images
+  without a series description, are `UNKNOWN`. It is None for images that are
+  not DBT.
+- `view_modification` is `ViewModification.MODIFIED` when the spot flag is True,
+  a view modifier is represented, or the view text has words besides the base
+  view and side (`SPOT CC`); otherwise `STANDARD` for a known view and
+  `UNKNOWN` for an unknown one. A modified view never counts as standard CC or
+  MLO coverage.
+- `recovered_laterality` and `recovered_view_position` return the tag value,
+  or, when no tag value was supplied, the single side or view named by the
+  series description. A populated tag is never overridden and a parse failure
+  stays UNKNOWN; `laterality` and `view_position` themselves are unchanged.
 
 Image metadata automatically projects ROI collections. Missing/null ROI input
 preserves; explicit `[]` clears; malformed/conflicting input preserves with an issue.
@@ -218,9 +295,21 @@ Targets are never deleted by clearing associations. Registry keys remain
 (patient_id, registry_id), even when exam ownership differs.
 
 Registry identity maps `patient_id` to `empi_anon` and `registry_id` to
-`cancer_registry_id`. Payload fields are unbound by default and can be configured
-through `columns`. Caller-supplied registry inputs do not require a physical table
-name. MagView assignment IDs use `cancer_outcome_registry_id`.
+`cancer_outcome_registry_id`, the same columns as the MagView assignment pointer.
+Payload fields are unbound by default and can be configured through `columns`.
+Caller-supplied registry inputs do not require a physical table name.
+
+Every registry row with a patient is a registry record of that patient.
+`patient.registry_entries` lists the keyed entries that name the patient,
+whether or not an exam is assigned to them, followed by entries of other
+patients assigned to the patient's exams. A row without a registry ID becomes an
+`UnkeyedRegistryEntry` in `patient.unkeyed_registry_entries`, reported once per
+call by the INFO issue `unkeyed_registry_entries` with the row count. Unkeyed
+records are values on the patient, not graph entities: no exam is assigned to
+them and none is matched to a keyed entry. Refresh replaces the unkeyed records
+of every patient the rows address, so they clear once all of a patient's rows
+carry IDs; merge preserves them and reports a `registry_merge_requires_registry_id`
+warning. A row without a patient remains `incomplete_registry_identity`.
 
 ## Validation
 
