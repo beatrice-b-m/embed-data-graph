@@ -354,3 +354,14 @@ its output is JSON-ready only when those metadata values already are.
 MagView normalization recognizes its source codes, such as `W` for upper outer,
 `OU` for outer and `IN` for inner. The earlier quickstart's `UOQ` was unrecognized;
 examples now use `W` and assert that finding normalization emits no warnings.
+
+Incomplete source rows are available through `Exam.unkeyed_findings` and
+`Patient.invalid_accession_records`; their typed records are documented in
+`embed_data_graph.clinical.incomplete`. Use `Patient.claimed_exams` to include
+contested contacts and `Exam.contested` to identify them. See the incomplete
+contacts contract for snapshot, partition and invalid-accession behavior.
+
+`DatasetGraph` and `Selection` expose `records(name)`, `table(name)`, `tables()`
+and `table_schema(name)`. `TableSchema` and the scalar cell alias `Scalar` live in
+`embed_data_graph.core.tabular`. See [tabular schemas](tabular.md) for the stable
+column lists, datetime rules, supplementary tables and key encoding.

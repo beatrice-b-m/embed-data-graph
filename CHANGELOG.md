@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Incomplete clinical contacts (#20)
+
+- Retain assessments without finding numbers on their exam, with unknown side.
+- Expose contested exams through every claimant and include them in patient partitions.
+- Retain configurable invalid accessions (default `999`) as patient-scoped records.
+- Bind accession category, reported left/right finding totals and patient cohort number.
+
+### Tabular projections (#21)
+
+- Add graph and selection records, optional pandas tables, and inspectable schemas.
+- Flatten clinical codes and dates; expose supplied links, nested values,
+  unresolved records, and historical load/current projection diagnostics.
+- Keep keys and row ordering independent of source indexes and physical mappings.
+
 ### Added
 
 - Registry payload bindings for the internal registry file:

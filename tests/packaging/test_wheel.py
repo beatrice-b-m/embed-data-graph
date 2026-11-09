@@ -26,6 +26,10 @@ assert "site-packages" in Path(embed_data_graph.__file__).as_posix()
 assert embed_data_graph.__version__ == version("embed-data-graph")
 graph = load_embed(magview=[{"empi_anon": "P", "acc_anon": "A", "numfind": 1, "side": "L"}]).graph
 assert graph.exam("A").findings == (graph.finding("A", "1"),)
+import sys
+assert "pandas" not in sys.modules
+assert graph.records("findings")[0]["finding_number"] == "1"
+assert "pandas" not in sys.modules
 """
 
 

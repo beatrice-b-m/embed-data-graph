@@ -49,3 +49,27 @@ These are synthetic scale results, not qualification on the full private EMBED
 dataset, real pixels, or every source schema. Representative private-data testing
 requires data supplied through an authorized path. Registry measurements cover
 the default patient/registry-ID mapping; optional payload mappings were not measured.
+
+## Tabular projection measurements
+
+Measured 2026-11-09 on the #20/#21 implementation, Python 3.13, macOS arm64:
+
+```bash
+uv run --frozen python -m benchmarks.tabular_projection --sizes 100 200 400
+```
+
+| Patients | Input rows | Load (s) | Exam records (s) | All tables (s) | Output rows | Retained bytes | Peak bytes |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 600 | 0.165 | 0.023 | 0.374 | 16,099 | 7,426,531 | 11,582,541 |
+| 200 | 1,200 | 0.310 | 0.045 | 0.699 | 32,199 | 9,349,253 | 17,694,331 |
+| 400 | 2,400 | 0.648 | 0.090 | 1.344 | 64,399 | 18,467,139 | 35,143,168 |
+
+One diagnostic run per size, with tracemalloc enabled for all timed stages;
+input construction and pandas import are excluded. Retained/peak bytes include
+the graph, exam records and every output DataFrame. First-size initialization
+allocations affect memory, so these are not per-row allocation estimates.
+Supplementary scalar values account for most output rows. Exam-only requests
+avoid constructing those tables. Projection time approximately doubled with each
+size in this fixture; sorting is O(n log n), with linear traversal and storage.
+This is synthetic evidence only, not a full private-data benchmark or a timing
+threshold. No million-row performance claim follows from these measurements.

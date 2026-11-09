@@ -1,6 +1,6 @@
 """Static consumer journey: checked by mypy, not executed by pytest."""
 from datetime import date
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from typing_extensions import assert_type
 
 from embed_data_graph import (
@@ -10,6 +10,8 @@ from embed_data_graph import (
     UnkeyedRegistryEntry, UnresolvedClinicalRecord, load_embed,
 )
 from embed_data_graph.core.selection import Selection
+from embed_data_graph.core.tabular import Scalar, TableSchema
+from embed_data_graph.clinical.incomplete import InvalidAccessionRecord, UnkeyedFinding
 from embed_data_graph.clinical.attributes import AttributeResolution
 from embed_data_graph.clinical.histories import CancerHistoryObservation, PatientHistoryObservation
 
@@ -77,3 +79,13 @@ assert_type(CancerRegistryEntry("P", "1").laterality, Laterality)
 assert_type(UnkeyedRegistryEntry().icdo3, Optional[str])
 assert_type(Patient("P").unresolved_clinical_records, Tuple[UnresolvedClinicalRecord, ...])
 assert_type(Patient("P").procedures[0].identity.laterality, Laterality)
+
+# Tabular projections and incomplete contacts remain statically navigable.
+assert_type(graph.records("exams"), List[Dict[str, Scalar]])
+assert_type(graph.table_schema("exams"), TableSchema)
+assert_type(selected.records("findings"), List[Dict[str, Scalar]])
+assert_type(selected.table_schema("exams"), TableSchema)
+assert_type(patient.claimed_exams, Tuple[Exam, ...])
+assert_type(patient.invalid_accession_records, Tuple[InvalidAccessionRecord, ...])
+assert_type(Exam("D").unkeyed_findings, Tuple[UnkeyedFinding, ...])
+assert_type(load_embed(invalid_accessions={"999", "invalid"}), LoadReport)
