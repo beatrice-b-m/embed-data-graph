@@ -164,3 +164,19 @@ def test_unkeyed_registry_projection_is_independent_of_input_order():
         assert first.records(name) == reordered.records(name)
     assert len(first.records("unresolved")) == 3
     assert len({row["record_key"] for row in first.records("unresolved")}) == 3
+
+
+def test_invalid_accession_diagnostics_follow_the_patient_into_subsets():
+    graph = load_embed(magview=[{"empi_anon": p, "acc_anon": 999, "asses": "A"}
+                               for p in ("P", "Q")]).graph
+    selected = graph.select(level="patient", predicate=lambda p: p.patient_id == "P")
+    part = graph.partition(level="patient", key=lambda p: p.patient_id)["P"]
+    patient_key = selected.records("patients")[0]["entity_key"]
+    for subset in (selected, part):
+        issues = [row for row in subset.records("issues") if row["code"] == "invalid_accession"]
+        assert len(issues) == 1
+        assert issues[0]["kind"] == "patient" and issues[0]["entity_key"] == patient_key
+        assert issues[0] in graph.records("issues")
+    unowned = load_embed(exams=[{"acc_anon": 999}]).graph
+    issue = next(row for row in unowned.records("issues") if row["code"] == "invalid_accession")
+    assert issue["entity_key"] is None

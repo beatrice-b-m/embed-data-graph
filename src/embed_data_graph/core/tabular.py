@@ -269,7 +269,11 @@ def _entity_row(entity: Any, table: str, graph: DatasetGraph) -> Dict[str, Any]:
 
 def _issue_row(issue: Issue, kind: Optional[str] = None, key: Optional[str] = None) -> Dict[str, Scalar]:
     context = issue.context
-    if key is None:
+    if key is None and issue.code == "invalid_accession":
+        # The sentinel never names an exam; retain patient-scoped diagnostics.
+        if context.get("patient_id") is not None:
+            kind, key = "patient", _encode(context["patient_id"])
+    elif key is None:
         if "identity" in context:
             for candidate in _GRAINS.values():
                 if candidate in issue.code.split("_"):
