@@ -52,9 +52,7 @@ research_roi = ResearchROI.from_embed_coordinates((0, 0, 9, 9), image_id="I", ro
 assert_type(research_roi, ResearchROI)
 assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
-<<<<<<< HEAD
 assert_type(Exam("C").imaged_laterality, Laterality)
-=======
 assert_type(Patient("P").registry_entries, Tuple[CancerRegistryEntry, ...])
 assert_type(Patient("P").unkeyed_registry_entries, Tuple[UnkeyedRegistryEntry, ...])
 assert_type(
@@ -63,4 +61,3 @@ assert_type(
 )
 assert_type(Patient("P").unresolved_clinical_records, Tuple[UnresolvedClinicalRecord, ...])
 assert_type(Patient("P").procedures[0].identity.laterality, Laterality)
->>>>>>> origin/main
