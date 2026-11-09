@@ -308,7 +308,7 @@ The supported default map is:
 | --- | --- |
 | `patients` | `patient_id <- empi_anon`; exam context `acc_anon`/`studydate_anon`; `sex <- GENDER_DESC`; `race <- race`; `ethnicity <- ethnicity`; `birth_year` unbound |
 | `exams` | `accession <- acc_anon`; `patient_id <- empi_anon`; `exam_date <- studydate_anon`; `exam_description <- desc`; `density <- tissueden`; `exam_type <- mg_exam_type`; `visit_type <- vtype`; `modality <- modality_desc`; `patient_age <- age_at_study_anon` |
-| `findings` | `(accession, finding_number) <- (acc_anon, numfind)`; `patient_id <- empi_anon`; `laterality <- side` (a supplied null side is bilateral, like `B`); `assessment <- asses`; `recommendation <- recc`; `location <- location`; `depth <- depth`; `distance <- distance` (negative values are exceptional codes, kept raw only); descriptors `mass`, `asymmetry`, `arch_distortion`, `calc`, `massshape`, `massmargin`, `massdens`, `calcfind`, `calcdistri`, `calcnumber`, `otherfind`, `implanfind` into `finding.descriptors` as source codes |
+| `findings` | `(accession, finding_number) <- (acc_anon, numfind)`; `patient_id <- empi_anon`; `laterality <- side` (a supplied null side is bilateral, like `B`); `assessment <- asses`; `recommendation <- recc`; `location <- location`; `depth <- depth`; `distance <- distance` (negative values are exceptional codes, kept raw only); descriptors `massshape`, `massmargin`, `massdens`, `calcfind`, `calcdistri`, `calcnumber`, `otherfind`, `implanfind` into `finding.descriptors` as source codes; the legacy derived flags `mass`, `asymmetry`, `arch_distortion` and `calc` are unbound |
 | `images` | source path `anon_dicom_path`; patient/accession `empi_anon`/`acc_anon`; laterality/view `ImageLateralityFinal`/`ViewPosition`; modality `Modality`; derived type `FinalImageType`; dimensions `Rows`/`Columns`; frames `ImagesInAcquisition` (DBT images only); study/series UIDs from the path |
 | `rois` | source path `anon_dicom_path`; coordinates `ROI_coords`; frame facts `ROI_frames`; depth flag `ROI_depth_derived` |
 | `procedures` | identity `(empi_anon, procdate_anon, type, bside)`; optional accession/finding `(acc_anon, numfind)` |
@@ -319,7 +319,11 @@ The supported default map is:
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
 `DEFAULT_COLUMNS` is the authoritative mapping object; the table above is a
-quick reference. The registry identity binding is deliberately narrower than
+quick reference. The MagView `mass`, `asymmetry`, `arch_distortion` and `calc`
+columns were computed by a legacy labeling rule rather than recorded by
+radiologists, so they are not loaded as source flags. To load them as legacy
+values, bind the `findings` fields `mass`, `asymmetry`,
+`architectural_distortion` and `calcification` explicitly. The registry identity binding is deliberately narrower than
 the rest of its possible payload. Map additional registry payload fields only
 when their source meanings are established.
 
