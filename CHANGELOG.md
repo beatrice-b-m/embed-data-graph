@@ -4,6 +4,21 @@
 
 ### Added
 
+- Image rows load `manufacturer`, `series_description`, `dicom_image_type`,
+  `view_modifier` and `spot_magnification`, bound by default to
+  `Manufacturer`, `SeriesDescription`, `ImageType`,
+  `0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning` and `spot_mag`,
+  and keep the supplied view text as `source_view_position`. These were
+  previously rejected as unknown image fields.
+- `MammogramImage.dbt_form` (`DbtForm`: projection, reconstruction or unknown)
+  for DBT images, read from projection or reconstruction wording; a Hologic
+  series description naming neither form is a reconstruction, `MammogramImage.view_modification` (`ViewModification`:
+  standard, modified or unknown), and `recovered_laterality` /
+  `recovered_view_position`, which fall back to the series description only
+  when no tag value was supplied. `DbtForm` and `ViewModification` are root
+  exports. `view_position` coercion is unchanged, so a modified view still
+  reads as its base view; use `view_modification` to keep it out of standard
+  CC and MLO coverage.
 - `Exam.imaged_laterality`, the `Laterality` of the breasts an exam imaged
   (LEFT, RIGHT, BILATERAL or UNKNOWN). It is read from the exam description by
   case-insensitive substrings in order (`bil`, then `left`, then `right`), the
