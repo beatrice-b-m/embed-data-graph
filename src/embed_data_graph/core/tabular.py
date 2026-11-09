@@ -350,6 +350,8 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
     for address, record, kind, reason in unresolved:
         # Diagnostic occurrence IDs have no cross-load clinical identity promise.
         leaves = dict(_leaves(record))
+        if hasattr(record, "payload") and kind == "registry":
+            leaves.update(dict(_leaves(record.payload, "/payload")))
         base = _encode((address, leaves, kind, reason))
         occurrence = occurrences.get(base, 0)
         occurrences[base] = occurrence + 1
@@ -369,8 +371,6 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
             _code_fields(row, name, getattr(interpretation, name, None))
         _code_fields(row, "procedure_type", getattr(record, "procedure_type", None))
         output["unresolved"].append(normalize(row, "unresolved", kind, key))
-        if hasattr(record, "payload") and kind == "registry":
-            leaves.update(dict(_leaves(record.payload, "/payload")))
         for field, value in leaves.items():
             output["unresolved_values"].append(dict(record_key=key, field=field, value=value))
     output["issues"] = list({row["issue_key"]: row for row in diagnostics}.values())

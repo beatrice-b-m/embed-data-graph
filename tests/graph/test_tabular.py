@@ -151,3 +151,16 @@ def test_roi_projection_preserves_exclusive_stops_and_source_convention():
     assert (row["y_min"], row["x_min"], row["y_stop"], row["x_stop"]) == (0, 0, 11, 11)
     assert (row["source_y_max"], row["source_x_max"]) == (10, 10)
     assert row["source_coordinate_convention"] == "inclusive_maxima"
+
+
+def test_unkeyed_registry_projection_is_independent_of_input_order():
+    rows = [
+        {"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2020-01-01", "HISTOLOGY_ICDO3": "8500"},
+        {"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2021-01-01", "HISTOLOGY_ICDO3": "8520"},
+    ]
+    first = load_embed(registry=rows + rows[:1]).graph
+    reordered = load_embed(registry=list(reversed(rows + rows[:1]))).graph
+    for name in ("unresolved", "unresolved_values", "issues"):
+        assert first.records(name) == reordered.records(name)
+    assert len(first.records("unresolved")) == 3
+    assert len({row["record_key"] for row in first.records("unresolved")}) == 3
