@@ -23,9 +23,9 @@ from embed_data_graph.clinical.exams import BreastSide, Exam
 from embed_data_graph.clinical.findings import Finding
 from embed_data_graph.clinical.patients import Patient
 from embed_data_graph.clinical.procedures import Procedure, ProcedureIdentity
-from embed_data_graph.clinical.pathology import Pathology, CancerRegistryEntry, UnkeyedRegistryEntry
+from embed_data_graph.clinical.pathology import Pathology, CancerRegistryEntry, UnkeyedRegistryEntry, UnresolvedClinicalRecord
 from embed_data_graph.core.codes import Code
-from embed_data_graph.core.primitives import Laterality, ImageModality, ViewPosition
+from embed_data_graph.core.primitives import DbtForm, Laterality, ImageModality, ViewModification, ViewPosition
 from embed_data_graph.core.validation import ValidationResult, validate
 from embed_data_graph.core.graph import DatasetGraph
 from embed_data_graph.core.source import Issue, SourceRef
@@ -49,9 +49,12 @@ __all__ = [
     "Pathology",
     "CancerRegistryEntry",
     "UnkeyedRegistryEntry",
+    "UnresolvedClinicalRecord",
     "Laterality",
     "ImageModality",
     "ViewPosition",
+    "ViewModification",
+    "DbtForm",
     "ValidationResult",
     "validate",
     "RegionOfInterest",

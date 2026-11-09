@@ -48,6 +48,25 @@ class BreastSide:
     """Images of this side."""
 
 
+def _description_laterality(description: Optional[str]) -> Laterality:
+    """Return the breasts an exam description names, checked in a fixed order.
+
+    The description is lowercased and searched for substrings: ``bil`` means
+    BILATERAL, otherwise ``left`` means LEFT, otherwise ``right`` means RIGHT,
+    otherwise UNKNOWN. The order settles descriptions that name several sides;
+    this is the rule the EMBED cohort pipelines have used on ``desc``.
+    """
+
+    text = (description or "").lower()
+    if "bil" in text:
+        return Laterality.BILATERAL
+    if "left" in text:
+        return Laterality.LEFT
+    if "right" in text:
+        return Laterality.RIGHT
+    return Laterality.UNKNOWN
+
+
 class Exam(MutableEntity):
     """A breast-imaging exam, keyed by accession number.
 
@@ -89,6 +108,9 @@ class Exam(MutableEntity):
         Consumer metadata, copied into a dict.
     source : SourceRef or None, optional
         Row the exam was read from.
+    location_id : str or None, optional
+        Opaque identifier of the exam location (EMBED ``loc_num_anon``); no
+        site, facility or ordering is implied. Default None.
 
     Notes
     -----
@@ -131,6 +153,8 @@ class Exam(MutableEntity):
     """Exam modality and its meaning."""
     patient_age: Optional[float]
     """Patient age in years at the exam; EMBED top-codes ages of 90 or more to 89."""
+    location_id: Optional[str]
+    """Opaque exam-location identifier; no site or ordering is implied."""
     asserted_patient_ids: Set[str]
     """Source patient claims; not a choice of owner."""
     linked_accessions: Set[str]
@@ -159,6 +183,7 @@ class Exam(MutableEntity):
         owner_explicit: bool = False,
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
+        location_id: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.accession_number = accession_number
@@ -176,6 +201,7 @@ class Exam(MutableEntity):
         self.visit_type = Code.coerce(visit_type)
         self.modality = Code.coerce(modality)
         self.patient_age = patient_age
+        self.location_id = location_id
         self.linked_accessions = set(linked_accessions or ())
         self.registry_references = set(registry_references or ())
         self._owner_explicit = bool(owner_explicit)
@@ -277,6 +303,31 @@ class Exam(MutableEntity):
         return graph.linked_exams(self) if graph is not None else ()
 
     @property
+    def imaged_laterality(self) -> Laterality:
+        """Which breasts this exam imaged, derived from its description on each access.
+
+        No EMBED column records the imaged breasts. The description is
+        searched case-insensitively for substrings in order: ``bil`` is
+        BILATERAL, else ``left`` is LEFT, else ``right`` is RIGHT, else
+        UNKNOWN. Findings and images are never used: a finding side lists a
+        breast with a finding, and image metadata may cover only part of an
+        exam. UNKNOWN never defaults to a side; ``imaged_laterality.expand()``
+        gives the imaged sides, or () when unknown.
+
+        Unlike ``breast_sides``, a finding-free imaged breast is included and
+        a finding does not make a breast imaged.
+
+        Examples
+        --------
+        >>> Exam("A1", description="MG Diagnostic Left w/ Tomo").imaged_laterality
+        <Laterality.LEFT: 'L'>
+        >>> Exam("A2", description="MG Screening Bilateral").imaged_laterality.expand()
+        (<Laterality.LEFT: 'L'>, <Laterality.RIGHT: 'R'>)
+        """
+
+        return _description_laterality(self.description)
+
+    @property
     def breast_sides(self) -> Mapping[Laterality, BreastSide]:
         """Left and right views that have at least one finding or image."""
 
@@ -346,6 +397,7 @@ class Exam(MutableEntity):
             "visit_type": self.visit_type,
             "modality": self.modality,
             "patient_age": self.patient_age,
+            "location_id": self.location_id,
             "linked_accessions": self.linked_accessions,
             "registry_references": self.registry_references,
             "metadata": self.metadata,

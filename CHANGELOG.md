@@ -12,6 +12,62 @@
   (`diagnosis_date`, `laterality`, `icdo3`, `primary_site`, stages, receptors,
   `vital_status`). Registry laterality codes 0, 3, 5 and 9 load as an UNKNOWN
   side rather than being dropped; receptors keep their source codes.
+- A `body_measurements` table input for the dated measurement table
+  (`magview_bmi_anon`), bound by default to `empi_anon`,
+  `collection_date_anon`, `height_inches`, `weight_pounds` and `bmi`. Each
+  value is a patient attribute observation of the same name dated by its
+  collection date, read with `Patient.attribute_as_of`.
+  `Patient.replace_attribute_history` replaces one attribute's observations.
+- Intake answers `menarche_age`, `menopause_age` and `live_births`, bound to
+  `menarcheage_anon`, `menopauseage_anon` and `livebirths`, recorded as
+  attribute observations per exam context without a patient scalar.
+- `Exam.location_id`, an opaque exam-location identifier bound to
+  `loc_num_anon`.
+- A `cancer_history` table input for CancerHist, loading
+  `CancerHistoryObservation` values (`embed_data_graph.clinical.histories`)
+  read through `Patient.cancer_history` and the history kind `"cancer"`. The
+  subject flag decodes to `about_relative`; relationship, category and cancer
+  codes keep source codes without meanings, and BRCA, side and timing fields
+  stay raw text, because their catalog meanings are provisional or
+  unresolved.
+- `Patient.history_known_on` and `Patient.history_as_of`. Reported history is
+  captured at the intake of its context exam, so a fact is known on that exam's
+  date, resolved on each access; facts without a resolvable date are left out
+  of `history_as_of`. A load reports history with no context accession, or
+  whose loaded context exam has no date or belongs to another patient, once per
+  call as the WARNING `history_known_on_unresolved`.
+- `Patient.attribute_resolution`, returning `AttributeResolution` with an
+  `AttributeStatus` (`embed_data_graph.clinical.attributes`), so a caller can
+  tell an attribute that was never reported from one whose latest reports
+  disagree. `attribute_as_of` is unchanged.
+- Image rows load `manufacturer`, `series_description`, `dicom_image_type`,
+  `view_modifier` and `spot_magnification`, bound by default to
+  `Manufacturer`, `SeriesDescription`, `ImageType`,
+  `0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning` and `spot_mag`,
+  and keep the supplied view text as `source_view_position`. These were
+  previously rejected as unknown image fields.
+- `MammogramImage.dbt_form` (`DbtForm`: projection, reconstruction or unknown)
+  for DBT images, read from projection or reconstruction wording; a Hologic
+  series description naming neither form is a reconstruction, `MammogramImage.view_modification` (`ViewModification`:
+  standard, modified or unknown), and `recovered_laterality` /
+  `recovered_view_position`, which fall back to the series description only
+  when no tag value was supplied. `DbtForm` and `ViewModification` are root
+  exports. `view_position` coercion is unchanged, so a modified view still
+  reads as its base view; use `view_modification` to keep it out of standard
+  CC and MLO coverage.
+- `Exam.imaged_laterality`, the `Laterality` of the breasts an exam imaged
+  (LEFT, RIGHT, BILATERAL or UNKNOWN). It is read from the exam description by
+  case-insensitive substrings in order (`bil`, then `left`, then `right`), the
+  rule EMBED cohort pipelines use, never from findings or images.
+  `Exam.breast_sides` is unchanged: it lists sides with a finding or image,
+  which is not the set of breasts imaged.
+- `UnresolvedClinicalRecord`, exported at the root, and
+  `Patient.unresolved_clinical_records`. A procedure or pathology row that
+  cannot resolve its identity (a missing side, date or type, or disagreeing
+  pathology) now also carries a typed `record` in `graph.unresolved_records`,
+  and the patient its row names reaches it. The record keeps what the row
+  reported; an unreported procedure side is `UNKNOWN` and is never taken from
+  the finding side. The identity issue's context now includes `patient_id`.
 - `UnkeyedRegistryEntry`, exported at the root, and
   `Patient.unkeyed_registry_entries` / `Patient.set_unkeyed_registry_entries`.
   A registry row with a patient but no registry ID now loads as an unkeyed
@@ -23,6 +79,19 @@
 
 ### Changed
 
+- MagView `height` and `weight` remain unbound and are now documented as
+  intentionally so: they are unreliable and mostly missing, and the
+  body-measurement table is the canonical source.
+
+- `Patient.procedures` and `Patient.pathology` now include procedures and
+  bundles whose identity names the patient but that no exam reaches, ahead of
+  those reached through exams.
+- An unresolved procedure or pathology row without an accession is kept under
+  `("clinical", kind, ("patient", patient_id))` instead of under a single
+  unattached address shared by all patients, so a refresh replaces it per
+  patient. A pathology row now also addresses its exam or finding when it
+  resolves, so a corrected row clears the stale unresolved record an earlier
+  incomplete row left there.
 - The default `registry` `registry_id` binding is now
   `cancer_outcome_registry_id`, the column name in the internal registry file
   and in the MagView assignment pointer. Previously it was
@@ -35,6 +104,22 @@
   is assigned to, ahead of entries reached through its exams. Previously only
   exam-assigned entries were returned, so a patient-scoped search missed
   registry diagnoses never linked to an imaging accession.
+- The `findings` fields `mass`, `asymmetry`, `architectural_distortion` and
+  `calcification` are no longer bound by default. The MagView `mass`,
+  `asymmetry`, `arch_distortion` and `calc` columns were computed by a legacy
+  labeling rule, not recorded by radiologists, and that rule has known errors,
+  so loading them as source flags misrepresented them. `finding.descriptors`
+  no longer contains these four keys after a default load. To keep the
+  previous behavior, pass `columns={"findings": {"mass": "mass", "asymmetry":
+  "asymmetry", "architectural_distortion": "arch_distortion",
+  "calcification": "calc"}}`; the values then load as legacy derived codes.
+
+### Fixed
+
+- A pandas `NaT` in a dated column, such as a null `studydate_anon` in a
+  patients frame or a null `collection_date_anon` in a body-measurement frame
+  parsed with `pd.to_datetime`, is now a missing date. Previously it raised
+  `TypeError` and aborted the whole load.
 
 ## 0.3.1 — 2026-10-21
 

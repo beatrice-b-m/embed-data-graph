@@ -50,3 +50,28 @@ def test_missing_history_flag_is_unknown_not_no(missing):
 
     (history,) = graph.patient("P").medication_history
     assert history.current is None
+
+
+@pytest.mark.parametrize("missing", MISSING, ids=repr)
+def test_missing_context_date_leaves_a_patient_observation_undated(missing):
+    report = load_embed(patients=[
+        {"empi_anon": "P", "acc_anon": "A1", "studydate_anon": pd.Timestamp("2020-01-02"), "race": "X"},
+        {"empi_anon": "P", "acc_anon": "A2", "studydate_anon": missing, "race": "X"},
+    ])
+
+    dates = {item.accession_number: item.context_date for item in report.graph.patient("P").attribute_history("race")}
+    assert dates == {"A1": pd.Timestamp("2020-01-02").date(), "A2": None}
+
+
+@pytest.mark.parametrize("missing", MISSING, ids=repr)
+def test_missing_measurement_date_never_dates_a_body_measurement(missing):
+    frame = pd.DataFrame([
+        {"empi_anon": "P", "collection_date_anon": pd.Timestamp("2020-01-02"), "weight_pounds": 150.0},
+        {"empi_anon": "P", "collection_date_anon": missing, "weight_pounds": 151.0},
+    ])
+    patient = load_embed(body_measurements=frame).graph.patient("P")
+
+    assert {item.context_date for item in patient.attribute_history("weight_pounds")} == {
+        pd.Timestamp("2020-01-02").date(), None,
+    }
+    assert patient.attribute_as_of("weight_pounds", pd.Timestamp("2021-01-01").date()) == 150

@@ -23,14 +23,17 @@ from embed_data_graph.clinical.pathology import (
     Pathology,
     PathologyObservation,
     UnkeyedRegistryEntry,
+    UnresolvedClinicalRecord,
 )
 from embed_data_graph.clinical.patients import Patient
 from embed_data_graph.clinical.procedures import Procedure
 from embed_data_graph.core.codes import Code
 from embed_data_graph.core.graph import DatasetGraph
+from embed_data_graph.core.primitives import Laterality
 from embed_data_graph.core.source import Issue, IssueSeverity
-from embed_data_graph.sources.embed._values import Claims, cell, identifier, reconcile_merge, record_claims
+from embed_data_graph.sources.embed._values import Claims, cell, code, identifier, reconcile_merge, record_claims, text
 from embed_data_graph.sources.embed.procedures_pathology import normalize_pathology, normalize_procedure
+from embed_data_graph.sources.embed.vocabulary import PROCEDURE_TYPE
 
 ColumnMap = Mapping[str, Optional[str]]
 Attachment = Optional[Tuple[str, Any]]
@@ -53,11 +56,23 @@ class _Snapshot:
     addressed: Set[Any] = field(default_factory=set)
     unresolved: Dict[Any, List[Dict[str, Any]]] = field(default_factory=lambda: defaultdict(list))
 
-    def keep_unresolved(self, kind: str, attachment: Attachment, row: Mapping[str, Any], reason: str) -> None:
+    def keep_unresolved(
+        self, kind: str, attachment: Attachment, row: Mapping[str, Any], reason: str, columns: ColumnMap
+    ) -> None:
         address = ("clinical", kind, attachment)
         self.addressed.add(address)
-        self.unresolved[address].append({"payload": deepcopy(dict(row)), "attachment": attachment, "reason": reason})
-        self.issues.append(Issue(reason, "Clinical record needs explicit identity", context={"attachment": attachment}))
+        payload = deepcopy(dict(row))
+        record = _unresolved_record(kind, reason, payload, columns)
+        self.unresolved[address].append(
+            {"payload": payload, "attachment": attachment, "reason": reason, "record": record}
+        )
+        self.issues.append(
+            Issue(
+                reason,
+                "Clinical record needs explicit identity",
+                context={"attachment": attachment, "patient_id": record.patient_id},
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -129,10 +144,11 @@ def _collect_procedure(
         return  # A MagView row without procedure facts describes only a finding.
     attachment = _attachment(row, columns)
     _claim(state, row, "magview" if wide else "procedures", columns)
-    state.addressed.add(("clinical", "procedure", attachment))
+    record_attachment = _record_attachment(attachment, row, columns)
+    state.addressed.add(("clinical", "procedure", record_attachment))
     procedure, _ = normalize_procedure(row, columns)
     if procedure is None:
-        state.keep_unresolved("procedure", attachment, row, "incomplete_procedure_identity")
+        state.keep_unresolved("procedure", record_attachment, row, "incomplete_procedure_identity", columns)
         return
     payload = {name: column for name, column in columns.items() if name not in _PROCEDURE_IDENTITY_FIELDS}
     grouped[procedure.identity].append(_ProcedureRow(procedure, attachment, row, payload))
@@ -152,12 +168,16 @@ def _collect_pathology(
         return
     _claim(state, row, table, columns)
     attachment = _attachment(row, columns)
+    # The row addresses its own exam or finding even when it resolves, so a
+    # corrected row replaces what an earlier incomplete one left there.
+    state.addressed.add(("clinical", "pathology", _record_attachment(attachment, row, columns)))
     procedure, _ = normalize_procedure(row, columns)
     if procedure is not None:
         # Pathology rows also establish the procedure they were reported for.
         procedure_rows[procedure.identity].append(_ProcedureRow(procedure, attachment, row, {}))
         attachment = ("procedure", procedure.identity)
-    state.addressed.add(("clinical", "pathology", attachment))
+    record_attachment = _record_attachment(attachment, row, columns)
+    state.addressed.add(("clinical", "pathology", record_attachment))
     patient_id = _id_at(row, columns.get("patient_id"))
     if record_id is not None and patient_id is not None:
         key: Hashable = (patient_id, record_id)
@@ -166,7 +186,7 @@ def _collect_pathology(
         # date is an attribute, never part of the key.
         key = ("procedure", procedure.identity)
     else:
-        state.keep_unresolved("pathology", attachment, row, "incomplete_pathology_identity")
+        state.keep_unresolved("pathology", record_attachment, row, "incomplete_pathology_identity", columns)
         return
     grouped[key].append(_PathologyRow(descriptors, attachment, row, columns, record_id is not None))
 
@@ -198,7 +218,7 @@ def _apply_pathology(state: _Snapshot, key: Hashable, group: List[_PathologyRow]
         if existing is not None and not state.merge:
             graph.pop(existing)
         for item in group:
-            state.keep_unresolved("pathology", item.attachment, item.row, "ambiguous_pathology_identity")
+            state.keep_unresolved("pathology", item.attachment, item.row, "ambiguous_pathology_identity", item.columns)
         return
     for slot, candidates in slots.items():
         if len(candidates) > 1:
@@ -256,14 +276,35 @@ def _store_unresolved(state: _Snapshot) -> None:
 
     Unkeyed facts have no identity to merge by, so the latest snapshot is kept
     rather than accumulating repeated loads; merge leaves untouched ones alone.
+    Each named patient's ``unresolved_clinical_records`` follow the same
+    replacement.
     """
 
+    graph = state.graph
     for address in state.addressed:
         incoming = state.unresolved.get(address)
+        previous = graph.unresolved_records.get(address) or ()
         if incoming:
-            state.graph.unresolved_records[address] = incoming
+            graph.unresolved_records[address] = incoming
         elif not state.merge:
-            state.graph.unresolved_records.pop(address, None)
+            graph.unresolved_records.pop(address, None)
+        else:
+            continue
+        # Mirror the replacement in the views of the patients the rows name.
+        by_patient: Dict[str, List[UnresolvedClinicalRecord]] = defaultdict(list)
+        for entry in incoming or ():
+            record = entry["record"]
+            if record.patient_id is not None:
+                by_patient[record.patient_id].append(record)
+        stale = {
+            entry["record"].patient_id
+            for entry in previous
+            if isinstance(entry, Mapping) and isinstance(entry.get("record"), UnresolvedClinicalRecord)
+        }
+        for patient_id in stale.union(by_patient).difference({None}):
+            patient = graph.patient(patient_id)
+            if patient is not None:
+                patient._set_unresolved_clinical(address, by_patient.get(patient_id, ()))
 
 
 def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns: ColumnMap) -> None:
@@ -406,6 +447,47 @@ def _attachment(row: Mapping[str, Any], columns: ColumnMap) -> Attachment:
     return ("finding", (accession, finding)) if finding is not None else ("exam", accession)
 
 
+def _record_attachment(attachment: Attachment, row: Mapping[str, Any], columns: ColumnMap) -> Attachment:
+    """Return where an unresolved record of the row is kept.
+
+    A row without an accession is kept under its patient, so the patient can
+    reach it; only a row naming neither stays unattached.
+    """
+
+    if attachment is not None:
+        return attachment
+    patient_id = _id_at(row, columns.get("patient_id"))
+    return ("patient", patient_id) if patient_id is not None else None
+
+
+def _unresolved_record(
+    kind: str, reason: str, payload: Dict[str, Any], columns: ColumnMap
+) -> UnresolvedClinicalRecord:
+    """Normalize what an unresolved row does report, guessing nothing it lacks.
+
+    The side is read only from the bound procedure laterality column, never
+    from the finding side, and stays UNKNOWN when missing.
+    """
+
+    pathology: Dict[str, Any] = {}
+    descriptors: Tuple[PathologyObservation, ...] = ()
+    if kind == "pathology":
+        pathology, descriptors = normalize_pathology(payload, columns)
+    return UnresolvedClinicalRecord(
+        kind=kind,
+        reason=reason,
+        patient_id=_id_at(payload, columns.get("patient_id")),
+        laterality=Laterality.coerce(text(cell(payload, columns.get("laterality")))),
+        performed_date=text(cell(payload, columns.get("performed_date", columns.get("procedure_date")))),
+        procedure_type=PROCEDURE_TYPE.decode(code(cell(payload, columns.get("procedure_type")))),
+        severity=pathology.get("severity"),
+        raw_severity=pathology.get("raw_severity"),
+        report_documented_date=pathology.get("report_documented_date"),
+        descriptors=descriptors,
+        payload=payload,
+    )
+
+
 def _exam(graph: DatasetGraph, accession: str) -> Exam:
     """Return the exam with this accession, registering an empty one if needed."""
 
@@ -429,7 +511,7 @@ def _link(graph: DatasetGraph, kind: str, key: Hashable, attachment: Attachment)
     """Add the attachment's key to the entity's reference set for that kind."""
 
     entity = graph.get(kind, key)
-    if attachment is None or entity is None:
+    if attachment is None or entity is None or attachment[0] not in _REFERENCE_FIELDS:
         return
     name = _REFERENCE_FIELDS[attachment[0]]
     current = getattr(entity, name)

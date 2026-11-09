@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
 
-from embed_data_graph.clinical.attributes import PatientAttributeObservation
+from embed_data_graph.clinical.attributes import AttributeResolution, AttributeStatus, PatientAttributeObservation
 from embed_data_graph.clinical.histories import (
+    CancerHistoryObservation,
     MedicationHistoryObservation,
     PatientHistoryObservation,
     ProcedureHistoryObservation,
 )
-from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry
+from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry, UnresolvedClinicalRecord
 from embed_data_graph.core.entity import MutableEntity
 from embed_data_graph.core.graph import ensure_graph
 
@@ -101,6 +102,7 @@ class Patient(MutableEntity):
         for history in history_observations or ():
             self.add_history_observation(history)
         self._unkeyed_registry_entries: List[UnkeyedRegistryEntry] = []
+        self._unresolved_clinical: Dict[Any, List[UnresolvedClinicalRecord]] = {}
         self.set_unkeyed_registry_entries(unkeyed_registry_entries or ())
 
     def _coerce(self, name: str, value: Any) -> Any:
@@ -129,15 +131,34 @@ class Patient(MutableEntity):
 
     @property
     def procedures(self) -> Tuple["Procedure", ...]:
-        """Procedures of this patient's exams, once each."""
+        """Procedures of this patient, once each.
 
-        return _unique(procedure for exam in self.exams for procedure in exam.procedures)
+        Procedures whose identity names this patient come first, in
+        registration order, whether or not they are attached to an exam; then
+        those reached through the patient's exams. Rows that could not resolve
+        a procedure identity are in ``unresolved_clinical_records``.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "procedure")
+        return _unique([*named, *(procedure for exam in self.exams for procedure in exam.procedures)])
 
     @property
     def pathology(self) -> Tuple["Pathology", ...]:
-        """Pathology of this patient's exams, once each."""
+        """Pathology of this patient, once each.
 
-        return _unique(item for exam in self.exams for item in exam.pathology)
+        Bundles whose identity names this patient come first, in registration
+        order, whether or not an exam reaches them; then those reached through
+        the patient's exams.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "pathology")
+        return _unique([*named, *(item for exam in self.exams for item in exam.pathology)])
 
     @property
     def registry_entries(self) -> Tuple["CancerRegistryEntry", ...]:
@@ -155,6 +176,39 @@ class Patient(MutableEntity):
             return ()
         named = graph._scoped_to(self.patient_id, "registry")
         return _unique([*named, *(entry for exam in self.exams for entry in exam.registry_entries)])
+
+    @property
+    def unresolved_clinical_records(self) -> Tuple[UnresolvedClinicalRecord, ...]:
+        """Procedure and pathology rows naming this patient whose identity is unresolved.
+
+        Records are grouped by the attachment they were loaded under (this
+        patient for a row without an accession, else its exam, finding or
+        procedure), in the order those attachments were first loaded. A record
+        whose side was not reported has UNKNOWN laterality. Each load replaces
+        the records of the attachments it addresses, as it does in
+        ``graph.unresolved_records``; this is the same data, typed and
+        selected by the patient each row names.
+
+        Examples
+        --------
+        >>> from embed_data_graph import load_embed
+        >>> graph = load_embed(pathology=[{"empi_anon": "P1", "acc_anon": "A1", "numfind": 1,
+        ...     "procdate_anon": "2020-01-02", "type": "B", "path_severity": 0}]).graph
+        >>> (record,) = graph.patient("P1").unresolved_clinical_records
+        >>> record.severity.name, record.laterality.value
+        ('INVASIVE_BREAST_CANCER', 'UNKNOWN')
+        """
+
+        return tuple(record for records in self._unresolved_clinical.values() for record in records)
+
+    def _set_unresolved_clinical(self, address: Any, records: Iterable[UnresolvedClinicalRecord]) -> None:
+        """Replace this patient's records at one unresolved-record address; used by loaders."""
+
+        stored = list(records)
+        if stored:
+            self._unresolved_clinical[address] = stored
+        else:
+            self._unresolved_clinical.pop(address, None)
 
     @property
     def unkeyed_registry_entries(self) -> Tuple[UnkeyedRegistryEntry, ...]:
@@ -240,6 +294,43 @@ class Patient(MutableEntity):
         self._attribute_observations.append(observation)
         return observation
 
+    def replace_attribute_history(
+        self, attribute: str, observations: Iterable[PatientAttributeObservation]
+    ) -> Tuple[PatientAttributeObservation, ...]:
+        """Replace every observation of one attribute and keep the others.
+
+        Parameters
+        ----------
+        attribute : str
+            Attribute whose observations are replaced.
+        observations : iterable of PatientAttributeObservation
+            The complete replacement; empty clears the attribute. Observations
+            sharing a context replace one another, last wins.
+
+        Returns
+        -------
+        tuple of PatientAttributeObservation
+            The stored observations of ``attribute`` in insertion order.
+
+        Raises
+        ------
+        TypeError
+            A value is not a PatientAttributeObservation.
+        ValueError
+            A value is an observation of another attribute. Nothing changes
+            in either case.
+        """
+
+        replacement = list(observations)
+        if any(not isinstance(item, PatientAttributeObservation) for item in replacement):
+            raise TypeError("observations must be PatientAttributeObservation values")
+        if any(item.attribute != attribute for item in replacement):
+            raise ValueError("every observation must be of the replaced attribute")
+        self._attribute_observations = [item for item in self._attribute_observations if item.attribute != attribute]
+        for item in replacement:
+            self.add_attribute_observation(item)
+        return tuple(item for item in self._attribute_observations if item.attribute == attribute)
+
     def attribute_history(self, attribute: str) -> Tuple[PatientAttributeObservation, ...]:
         """Return the observations of one attribute, dated ones first by date.
 
@@ -266,8 +357,9 @@ class Patient(MutableEntity):
         Any
             The value from the latest dated observation that reports a value.
             None when no dated observation qualifies or when observations on
-            that latest date disagree. Undated observations and explicit nulls
-            are ignored, so later information never leaks into an earlier date.
+            that latest date disagree; ``attribute_resolution`` tells the two
+            apart. Undated observations and explicit nulls are ignored, so
+            later information never leaks into an earlier date.
 
         Examples
         --------
@@ -279,6 +371,40 @@ class Patient(MutableEntity):
         'F'
         """
 
+        return self.attribute_resolution(attribute, as_of).value
+
+    def attribute_resolution(self, attribute: str, as_of: date) -> AttributeResolution:
+        """Return ``attribute`` as of ``as_of`` with the reason for its value.
+
+        Applies the same rule as ``attribute_as_of``, and tells absence from
+        conflict: the status is NOT_REPORTED when no dated observation on or
+        before ``as_of`` reports a value, and CONFLICT when the observations
+        on the latest qualifying date disagree.
+
+        Parameters
+        ----------
+        attribute : str
+            Attribute name, such as ``"menarche_age"``.
+        as_of : datetime.date
+            Inclusive cutoff compared with each observation's ``context_date``.
+
+        Returns
+        -------
+        AttributeResolution
+            Status, agreed value, latest qualifying date and its candidates.
+
+        Examples
+        --------
+        >>> patient = Patient("P1", attribute_observations=[
+        ...     PatientAttributeObservation("menarche_age", 12, "A1", date(2018, 1, 1)),
+        ...     PatientAttributeObservation("menarche_age", 12, "A2", date(2020, 1, 1)),
+        ...     PatientAttributeObservation("menarche_age", 13, "A3", date(2020, 1, 1)),
+        ... ])
+        >>> resolution = patient.attribute_resolution("menarche_age", date(2021, 1, 1))
+        >>> resolution.status.value, resolution.candidates
+        ('conflict', (12, 13))
+        """
+
         eligible = [
             item
             for item in self._attribute_observations
@@ -288,13 +414,15 @@ class Patient(MutableEntity):
             and item.context_date <= as_of
         ]
         if not eligible:
-            return None
+            return AttributeResolution(attribute, as_of, AttributeStatus.NOT_REPORTED)
         latest = max(_context_date(item) for item in eligible)
         values: List[Any] = []
         for item in eligible:
             if item.context_date == latest and item.value not in values:
                 values.append(item.value)
-        return values[0] if len(values) == 1 else None
+        if len(values) == 1:
+            return AttributeResolution(attribute, as_of, AttributeStatus.REPORTED, values[0], latest, tuple(values))
+        return AttributeResolution(attribute, as_of, AttributeStatus.CONFLICT, None, latest, tuple(values))
 
     # -- reported history ------------------------------------------------------
 
@@ -315,6 +443,87 @@ class Patient(MutableEntity):
         """Reported prior procedures; not verified current-exam procedures."""
 
         return tuple(item for item in self._history_observations if isinstance(item, ProcedureHistoryObservation))
+
+    @property
+    def cancer_history(self) -> Tuple[CancerHistoryObservation, ...]:
+        """Reported cancer history about the patient or a relative; see ``about_relative``."""
+
+        return tuple(item for item in self._history_observations if isinstance(item, CancerHistoryObservation))
+
+    def history_known_on(self, observation: PatientHistoryObservation) -> Optional[date]:
+        """Return the date a reported history fact was known, or None.
+
+        Reported history is captured at the intake of the exam it came with,
+        so a fact was known on its context exam's date. That exam is looked up
+        on each call, so it may be loaded before or after the history. The
+        result is None when the observation has no context accession, the
+        exam is not in the graph, it belongs to or is claimed by another
+        patient, or it has no ISO exam date. It is not when the reported event
+        happened.
+
+        Examples
+        --------
+        >>> from embed_data_graph import load_embed
+        >>> graph = load_embed(
+        ...     exams=[{"acc_anon": "A1", "empi_anon": "P1", "studydate_anon": "2020-03-04"}],
+        ...     hormone_history=[{"empi_anon": "P1", "acc_anon": "A1", "type": "H", "code": "TAMOX"}],
+        ... ).graph
+        >>> patient = graph.patient("P1")
+        >>> patient.history_known_on(patient.medication_history[0])
+        datetime.date(2020, 3, 4)
+        """
+
+        return self._history_anchor(observation)[0]
+
+    def history_as_of(
+        self,
+        as_of: date,
+        kind: Union[Type[PatientHistoryObservation], str, None] = None,
+    ) -> Tuple[PatientHistoryObservation, ...]:
+        """Return the reported history known on or before ``as_of``, in stored order.
+
+        Parameters
+        ----------
+        as_of : datetime.date
+            Inclusive cutoff compared with ``history_known_on``.
+        kind : type, {"medication", "procedure", "cancer"} or None, optional
+            Only this kind of history; None (default) returns every kind.
+
+        Returns
+        -------
+        tuple of PatientHistoryObservation
+            Facts whose context exam date is on or before ``as_of``. Facts
+            without a resolvable date are excluded, so later information never
+            leaks into an earlier date.
+        """
+
+        selected = PatientHistoryObservation if kind is None else _history_type(kind)
+        result = []
+        for item in self._history_observations:
+            known = self.history_known_on(item) if isinstance(item, selected) else None
+            if known is not None and known <= as_of:
+                result.append(item)
+        return tuple(result)
+
+    def _history_anchor(self, observation: PatientHistoryObservation) -> Tuple[Optional[date], Optional[str]]:
+        """Return the known-on date of a history fact, or None and why not."""
+
+        accession = getattr(observation, "context_accession", None)
+        if accession is None:
+            return None, "missing_context_accession"
+        graph = self.graph
+        exam = graph.exam(accession) if graph is not None else None
+        if exam is None:
+            return None, "context_exam_not_loaded"
+        owned = exam.patient_id == self.patient_id or (
+            exam.patient_id is None and exam.asserted_patient_ids <= {self.patient_id}
+        )
+        if not owned:
+            return None, "context_exam_ownership_ambiguous"
+        day = _iso_day(exam.exam_date)
+        if day is None:
+            return None, "context_exam_without_date"
+        return day, None
 
     def add_history_observation(self, observation: PatientHistoryObservation) -> PatientHistoryObservation:
         """Add a reported fact, or update the stored record with the same record ID.
@@ -407,7 +616,7 @@ class Patient(MutableEntity):
 
         Parameters
         ----------
-        kind : type or {"medication", "procedure"}
+        kind : type or {"medication", "procedure", "cancer"}
             History class, or its short name.
         items : iterable of PatientHistoryObservation
             Replacement observations of that kind; empty clears it.
@@ -436,9 +645,21 @@ class Patient(MutableEntity):
             "attribute_observations": self.attribute_observations,
             "history_observations": self.history_observations,
             "unkeyed_registry_entries": self.unkeyed_registry_entries,
+            "unresolved_clinical_records": self.unresolved_clinical_records,
             "metadata": self.metadata,
             "source": self.source,
         }
+
+
+def _iso_day(value: Optional[str]) -> Optional[date]:
+    """Return the date of an ISO ``YYYY-MM-DD`` text, ignoring any time part."""
+
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value).strip()[:10])
+    except ValueError:
+        return None
 
 
 def _context_date(item: PatientAttributeObservation) -> date:
@@ -448,13 +669,17 @@ def _context_date(item: PatientAttributeObservation) -> date:
 
 def _history_type(kind: Union[Type[PatientHistoryObservation], str]) -> Type[PatientHistoryObservation]:
     if isinstance(kind, str):
-        names = {"medication": MedicationHistoryObservation, "procedure": ProcedureHistoryObservation}
+        names = {
+            "medication": MedicationHistoryObservation,
+            "procedure": ProcedureHistoryObservation,
+            "cancer": CancerHistoryObservation,
+        }
         if kind.lower() not in names:
-            raise TypeError("history kind must be 'medication', 'procedure' or a history class")
+            raise TypeError("history kind must be 'medication', 'procedure', 'cancer' or a history class")
         return names[kind.lower()]
     if isinstance(kind, type) and issubclass(kind, PatientHistoryObservation):
         return kind
-    raise TypeError("history kind must be 'medication', 'procedure' or a history class")
+    raise TypeError("history kind must be 'medication', 'procedure', 'cancer' or a history class")
 
 
 def _same_record(left: PatientHistoryObservation, right: PatientHistoryObservation) -> bool:
