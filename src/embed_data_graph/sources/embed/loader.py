@@ -389,6 +389,8 @@ def load_embed(
     _apply_patient_claims(graph, claims, mode)
     _report_history_anchors(graph, history_patients, issues)
 
+    if issues:
+        graph.load_issues = tuple(dict.fromkeys((*graph.load_issues, *issues)))
     return LoadReport(graph=graph, issues=tuple(issues), source_scope=resolved_scope)
 
 

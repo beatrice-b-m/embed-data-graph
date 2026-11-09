@@ -190,3 +190,21 @@ Exam bindings include `accession_type`, `total_left_findings` (`total_L_find`),
 and `total_right_findings` (`total_R_find`). The patient `cohort_number`
 (`cohort_num`) is an opaque string, with varying observations resolved like
 other patient attributes. Counts are reported values, never recomputed.
+
+### Tabular projections
+
+Projections read a snapshot of current entity values without changing graph
+membership or ownership. Records and frames are detached; metadata and consumer
+attributes are excluded. Selections project selected roots, descendants and
+ancestor context, with the same membership rules as partitions. Entity tables
+retain one row per registered entity and deterministic semantic keys, including
+when source DataFrame indexes are duplicated or reordered. Supplemental snapshot
+records have occurrence keys that are explicitly not clinical identities.
+
+Date parsing is strict ISO (including timestamps) or US `MM/DD/YYYY`, normalized
+to naive UTC, within 1678-01-01 inclusive to 2262-01-01 exclusive. Missing or
+invalid dates are null with projection issues. `graph.load_issues` retains
+historical load diagnostics, deduplicated across loads; projection issues are
+computed on demand and do not mutate it. Partitions/selections retain load issues
+that address included entities; unaddressed batch diagnostics remain on the full
+graph. See [tabular schemas](tabular.md) for types and relationship contracts.

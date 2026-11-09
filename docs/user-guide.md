@@ -725,3 +725,33 @@ Matching, localization, transfer, patch extraction, and visualization are
 consumer workflows. Keep them in the downstream repository that owns the
 relevant image data and analysis policy. See the [contract](contract.md) and [API reference](api.md) for the
 supported semantics.
+
+## Flat tables for analysis
+
+`records(name)` needs no pandas. `table(name)` returns one DataFrame and
+`tables()` returns all tables from one snapshot, importing optional pandas only
+when called. Each grain has one row per entity, string codes and parsed dates.
+Relationships, nested collections, unresolved rows and diagnostics have separate
+tables. The [tabular schema reference](tabular.md) lists every column and type.
+
+```python
+from embed_data_graph import load_embed
+
+graph = load_embed(magview=[
+    {"empi_anon": "P1", "acc_anon": "A1", "numfind": 1,
+     "asses": "A", "studydate_anon": "2020-01-02"},
+    {"empi_anon": "P1", "acc_anon": "A1", "numfind": None,
+     "asses": "S", "studydate_anon": "2020-01-02"},
+]).graph
+findings = graph.table("findings")
+assert findings.loc[findings.assessment == "A", "accession_number"].tolist() == ["A1"]
+assert graph.records("exams")[0]["exam_date"].year == 2020
+assert graph.records("unresolved")[0]["assessment"] == "S"
+assert graph.table_schema("exams").columns["exam_date"] == "datetime"
+```
+
+Do not count only the keyed `findings` table when reviewing all assessments:
+`unresolved` includes the unkeyed assessments and incomplete procedure/pathology
+records. `exam_patients` preserves contested claims; `exams.patient_id` still
+represents ownership. No projection reduces BI-RADS, chooses outcomes or defines
+a cohort. For records without pandas, run `python -m examples.tabular_views`.

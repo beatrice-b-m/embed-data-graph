@@ -21,9 +21,11 @@ from typing import (
 )
 
 from embed_data_graph.core.entity import MutableEntity, Reference
-from embed_data_graph.core.source import UnresolvedReference
+from embed_data_graph.core.source import Issue, UnresolvedReference
+from embed_data_graph.core.tabular import Scalar, TableSchema
 
 if TYPE_CHECKING:
+    from pandas import DataFrame  # type: ignore[import-untyped]
     from embed_data_graph.clinical.exams import Exam
     from embed_data_graph.clinical.findings import Finding
     from embed_data_graph.clinical.pathology import CancerRegistryEntry, Pathology
@@ -59,6 +61,10 @@ class DatasetGraph:
 
     Attributes
     ----------
+    load_issues : tuple of Issue
+        Deduplicated diagnostics from loads into this graph. Historical issues
+        remain after corrections; projections add current date diagnostics
+        without mutating this tuple. Partitions retain entity-addressed issues.
     unresolved_records : dict
         Source payload snapshots whose clinical identity could not be resolved,
         keyed by the attachment the adapter could establish. They are not
@@ -88,6 +94,7 @@ class DatasetGraph:
         self._scoped: Dict[str, Dict[int, MutableEntity]] = defaultdict(dict)
         self._context: Set[int] = set()
         self.unresolved_records: Dict[Any, Any] = {}
+        self.load_issues: Tuple[Issue, ...] = ()
         self._claimants: Dict[str, Dict[int, Exam]] = defaultdict(dict)
 
     # -- registries ----------------------------------------------------------
@@ -768,6 +775,119 @@ class DatasetGraph:
         for roi in replacement:
             self.register(roi)
 
+    def records(self, name: str) -> List[Dict[str, Scalar]]:
+        """Return detached flat records for one grain or supplementary table.
+
+        Parameters
+        ----------
+        name : str
+            patients, exams, findings, procedures, pathology, registry, images,
+            rois, one of the link tables, values, unresolved, unresolved_values,
+            or issues. See ``table_schema`` and docs/tabular.md.
+
+        Returns
+        -------
+        list of dict
+            Fresh scalar rows sorted by schema key, one per entity for grain
+            tables. Codes are strings with companion meanings; dates are naive
+            UTC datetimes. Missing/invalid dates are None with diagnostic rows
+            in ``records("issues")``. Metadata and consumer attributes are
+            excluded. No pandas import, mutation, file IO, or row limit.
+
+        Raises
+        ------
+        ValueError
+            Unknown table name.
+        TypeError
+            A custom semantic identity or value cannot be serialized. Supported
+            keys are scalars, dates, enums, Code, dataclasses and nested tuples.
+
+        Notes
+        -----
+        Projection uses linear storage and traversal plus key sorting. Each
+        invocation reads current graph state. Use ``tables`` to build all
+        DataFrames from one snapshot. Supplementary values use JSON Pointer
+        field paths; links retain supplied targets even when absent.
+
+        Examples
+        --------
+        >>> from embed_data_graph import load_embed
+        >>> graph = load_embed(exams=[{"acc_anon": "A", "studydate_anon": "2020-01-02"}]).graph
+        >>> graph.records("exams")[0]["exam_date"].year
+        2020
+        """
+
+        from embed_data_graph.core.tabular import project, table_schema
+        table_schema(name)
+        return project(self, (name,))[name]
+
+    def table_schema(self, name: str) -> TableSchema:
+        """Return the ordered columns, logical types and unique key of a table.
+
+        Parameters
+        ----------
+        name : str
+            Same table names as ``records``; schemas also describe empty tables.
+
+        Returns
+        -------
+        TableSchema
+            Immutable description, independent of this graph's contents.
+
+        Raises
+        ------
+        ValueError
+            Unknown table name.
+        """
+
+        from embed_data_graph.core.tabular import table_schema
+        return table_schema(name)
+
+    def table(self, name: str) -> DataFrame:
+        """Return one detached pandas DataFrame with a fresh RangeIndex.
+
+        Parameters
+        ----------
+        name : str
+            Table accepted by ``records``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Nullable typed columns in schema order. Dates use datetime64[ns].
+            Editing the frame does not edit the graph; semantics match records.
+
+        Raises
+        ------
+        ImportError
+            Optional pandas is not installed. Install it to use DataFrames.
+        ValueError, TypeError
+            Same invalid table/key conditions as ``records``.
+        """
+
+        from embed_data_graph.core.tabular import dataframe
+        return dataframe(self.records(name), self.table_schema(name))
+
+    def tables(self) -> Dict[str, DataFrame]:
+        """Return every grain, link, value and diagnostic table from one snapshot.
+
+        Returns
+        -------
+        dict of str to pandas.DataFrame
+            Fresh frames; same schemas and contracts as ``table``. Traverses
+            the graph once and sorts by each table's key; no aggregation.
+
+        Raises
+        ------
+        ImportError
+            Optional pandas is not installed.
+        TypeError
+            A custom semantic key or value cannot be serialized.
+        """
+
+        from embed_data_graph.core.tabular import dataframe, project, table_schema
+        return {name: dataframe(rows, table_schema(name)) for name, rows in project(self).items()}
+
     # -- selection and copies --------------------------------------------------
 
     @overload
@@ -924,6 +1044,10 @@ class DatasetGraph:
         }
         for _, address in sorted(matched, key=lambda entry: entry[0]):
             output.unresolved_records[deepcopy(address)] = deepcopy(self.unresolved_records[address])
+        from embed_data_graph.core.tabular import _encode, _issue_row
+        keys = {(obj.kind, _encode(obj.key)) for kind in KINDS for obj in output._values(kind)}
+        output.load_issues = tuple(issue for issue in self.load_issues
+                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys)
         return output
 
     def is_context(self, entity: MutableEntity) -> bool:

@@ -360,3 +360,8 @@ Incomplete source rows are available through `Exam.unkeyed_findings` and
 `embed_data_graph.clinical.incomplete`. Use `Patient.claimed_exams` to include
 contested contacts and `Exam.contested` to identify them. See the incomplete
 contacts contract for snapshot, partition and invalid-accession behavior.
+
+`DatasetGraph` and `Selection` expose `records(name)`, `table(name)`, `tables()`
+and `table_schema(name)`. `TableSchema` and the scalar cell alias `Scalar` live in
+`embed_data_graph.core.tabular`. See [tabular schemas](tabular.md) for the stable
+column lists, datetime rules, supplementary tables and key encoding.
