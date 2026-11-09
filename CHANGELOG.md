@@ -21,6 +21,75 @@
   `AttributeStatus` (`embed_data_graph.clinical.attributes`), so a caller can
   tell an attribute that was never reported from one whose latest reports
   disagree. `attribute_as_of` is unchanged.
+- Image rows load `manufacturer`, `series_description`, `dicom_image_type`,
+  `view_modifier` and `spot_magnification`, bound by default to
+  `Manufacturer`, `SeriesDescription`, `ImageType`,
+  `0_ViewCodeSequence_0_ViewModifierCodeSequence_CodeMeaning` and `spot_mag`,
+  and keep the supplied view text as `source_view_position`. These were
+  previously rejected as unknown image fields.
+- `MammogramImage.dbt_form` (`DbtForm`: projection, reconstruction or unknown)
+  for DBT images, read from projection or reconstruction wording; a Hologic
+  series description naming neither form is a reconstruction, `MammogramImage.view_modification` (`ViewModification`:
+  standard, modified or unknown), and `recovered_laterality` /
+  `recovered_view_position`, which fall back to the series description only
+  when no tag value was supplied. `DbtForm` and `ViewModification` are root
+  exports. `view_position` coercion is unchanged, so a modified view still
+  reads as its base view; use `view_modification` to keep it out of standard
+  CC and MLO coverage.
+- `Exam.imaged_laterality`, the `Laterality` of the breasts an exam imaged
+  (LEFT, RIGHT, BILATERAL or UNKNOWN). It is read from the exam description by
+  case-insensitive substrings in order (`bil`, then `left`, then `right`), the
+  rule EMBED cohort pipelines use, never from findings or images.
+  `Exam.breast_sides` is unchanged: it lists sides with a finding or image,
+  which is not the set of breasts imaged.
+- `UnresolvedClinicalRecord`, exported at the root, and
+  `Patient.unresolved_clinical_records`. A procedure or pathology row that
+  cannot resolve its identity (a missing side, date or type, or disagreeing
+  pathology) now also carries a typed `record` in `graph.unresolved_records`,
+  and the patient its row names reaches it. The record keeps what the row
+  reported; an unreported procedure side is `UNKNOWN` and is never taken from
+  the finding side. The identity issue's context now includes `patient_id`.
+- `UnkeyedRegistryEntry`, exported at the root, and
+  `Patient.unkeyed_registry_entries` / `Patient.set_unkeyed_registry_entries`.
+  A registry row with a patient but no registry ID now loads as an unkeyed
+  record of that patient, reported once per call by the INFO issue
+  `unkeyed_registry_entries`. Refresh replaces the unkeyed records of each
+  patient the rows address; merge preserves them and reports
+  `registry_merge_requires_registry_id`. Unkeyed records travel with patient
+  partitions and appear in `graph.to_dict()` under each patient.
+
+### Changed
+
+- `Patient.procedures` and `Patient.pathology` now include procedures and
+  bundles whose identity names the patient but that no exam reaches, ahead of
+  those reached through exams.
+- An unresolved procedure or pathology row without an accession is kept under
+  `("clinical", kind, ("patient", patient_id))` instead of under a single
+  unattached address shared by all patients, so a refresh replaces it per
+  patient. A pathology row now also addresses its exam or finding when it
+  resolves, so a corrected row clears the stale unresolved record an earlier
+  incomplete row left there.
+- The default `registry` `registry_id` binding is now
+  `cancer_outcome_registry_id`, the column name in the internal registry file
+  and in the MagView assignment pointer. Previously it was
+  `cancer_registry_id`, which matched no registry column. Inputs that still use
+  `cancer_registry_id` can pass `columns={"registry": {"registry_id":
+  "cancer_registry_id"}}`.
+- Registry rows without a registry ID are no longer dropped with
+  `incomplete_registry_identity`; that issue now means the row has no patient.
+- `Patient.registry_entries` now includes the patient's entries that no exam
+  is assigned to, ahead of entries reached through its exams. Previously only
+  exam-assigned entries were returned, so a patient-scoped search missed
+  registry diagnoses never linked to an imaging accession.
+- The `findings` fields `mass`, `asymmetry`, `architectural_distortion` and
+  `calcification` are no longer bound by default. The MagView `mass`,
+  `asymmetry`, `arch_distortion` and `calc` columns were computed by a legacy
+  labeling rule, not recorded by radiologists, and that rule has known errors,
+  so loading them as source flags misrepresented them. `finding.descriptors`
+  no longer contains these four keys after a default load. To keep the
+  previous behavior, pass `columns={"findings": {"mass": "mass", "asymmetry":
+  "asymmetry", "architectural_distortion": "arch_distortion",
+  "calcification": "calc"}}`; the values then load as legacy derived codes.
 
 ## 0.3.1 — 2026-10-21
 

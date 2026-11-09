@@ -148,6 +148,44 @@ class ImageModality(CoercibleEnum):
         return aliases.get(_normalized_text(value), cls.UNKNOWN)
 
 
+class DbtForm(CoercibleEnum):
+    """Whether a tomosynthesis image is a projection or a reconstruction.
+
+    No governed attribute separates them; the form is derived from source
+    wording and stays UNKNOWN when that wording does not settle it.
+
+    Members
+    -------
+    PROJECTION='PROJECTION', RECONSTRUCTION='RECONSTRUCTION', UNKNOWN='UNKNOWN'.
+    """
+
+    PROJECTION = "PROJECTION"
+    RECONSTRUCTION = "RECONSTRUCTION"
+    UNKNOWN = "UNKNOWN"
+
+
+class ViewModification(CoercibleEnum):
+    """Whether an image's view is a standard or a modified acquisition.
+
+    A spot-compression, magnification or otherwise modified view does not
+    satisfy standard CC or MLO coverage even when its view position reads CC
+    or MLO.
+
+    Members
+    -------
+    STANDARD='STANDARD'
+        A known view with no modification represented.
+    MODIFIED='MODIFIED'
+        A spot, magnification or other modification is represented.
+    UNKNOWN='UNKNOWN'
+        The view itself is unknown.
+    """
+
+    STANDARD = "STANDARD"
+    MODIFIED = "MODIFIED"
+    UNKNOWN = "UNKNOWN"
+
+
 class OrientationDirection(CoercibleEnum):
     """DICOM patient orientation direction component.
 

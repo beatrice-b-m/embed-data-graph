@@ -14,7 +14,7 @@ from embed_data_graph.core.source import Issue
 from embed_data_graph.imaging.images import MammogramImage
 from embed_data_graph.imaging.rois import RegionOfInterest
 from embed_data_graph.sources.embed._values import (
-    Claims, cell, identifier, is_missing, outside_graph_issue, reconcile_merge, record_claims, whole_number)
+    Claims, cell, identifier, is_missing, outside_graph_issue, reconcile_merge, record_claims, text, whole_number)
 
 
 def load_imaging(*, images: list[Mapping[str, Any]], rois: Optional[list[Mapping[str, Any]]],
@@ -150,7 +150,16 @@ def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], i
     fields: dict[str, Any] = {}
     scalar_map = {"laterality": "laterality", "view_position": "view_position", "height": "height", "width": "width",
                   "frame_count": "frame_count", "study_instance_uid": "study_instance_uid", "series_instance_uid": "series_instance_uid",
-                  "coordinate_frame_id": "coordinate_frame_id", "derived_image_type": "derived_image_type"}
+                  "coordinate_frame_id": "coordinate_frame_id", "derived_image_type": "derived_image_type",
+                  "manufacturer": "manufacturer", "series_description": "series_description",
+                  "dicom_image_type": "dicom_image_type", "view_modifier": "view_modifier",
+                  "spot_magnification": "spot_magnification"}
+    if _supplied(row, columns, "view_position"):
+        # The supplied text is kept so modified views stay distinguishable
+        # from the base view they coerce to.
+        fields["source_view_position"] = text(_mapped(row, columns, "view_position"))
+        if fields["source_view_position"] is not None:
+            fields["source_view_position"] = fields["source_view_position"].upper() or None
     for semantic, field in scalar_map.items():
         if _supplied(row, columns, semantic):
             raw = _mapped(row, columns, semantic)
@@ -159,6 +168,13 @@ def _observation(row: Mapping[str, Any], columns: Mapping[str, Optional[str]], i
                     raw = Laterality.coerce(raw)
                 elif semantic == "view_position":
                     raw = ViewPosition.coerce(raw)
+                elif semantic in _TEXT_FIELDS:
+                    raw = text(raw) or None
+                elif semantic == "spot_magnification":
+                    flag = _flag(raw)
+                    if flag is None:
+                        _issue(issues, "image_flag_parse", "Image flag is not 0 or 1", field=semantic, value=raw)
+                    raw = flag
                 elif semantic in {"height", "width", "frame_count"}:
                     count = whole_number(raw)
                     if count is None:
@@ -306,6 +322,18 @@ def _distinct(values: Iterable[Any]) -> list[Any]:
         if not is_missing(value) and value not in result:
             result.append(value)
     return result
+
+
+_TEXT_FIELDS = frozenset({"manufacturer", "series_description", "dicom_image_type", "view_modifier"})
+
+
+def _flag(value: Any) -> Optional[bool]:
+    """Return True for 1 and False for 0 (numeric or text), else None."""
+
+    if isinstance(value, bool):
+        return value
+    number = whole_number(value)
+    return {1: True, 0: False}.get(number) if number is not None else None
 
 
 def _unknown(field: str) -> Any:

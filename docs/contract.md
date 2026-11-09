@@ -20,7 +20,10 @@ clinical roots, grouped by `DatasetGraph` for membership and lookup. Constructio
 and updates use patient and semantic indexes to avoid scanning unrelated objects.
 
 Linked exams and registry assignments preserve source-supplied relationships.
-A registry entry is patient-scoped and may be assigned to multiple exams. Missing
+A registry entry is patient-scoped and may be assigned to multiple exams; a
+patient reaches its entries whether or not any exam is assigned to them. A
+registry row without a registry ID is kept as an unkeyed record of its patient,
+never matched to a keyed entry or given an inferred identity. Missing
 endpoints remain inspectable references and resolve when their objects arrive.
 The adapter preserves assignments without rerunning matching or inferring diagnoses.
 
@@ -44,14 +47,19 @@ disagrees with its EMBED path claims the column's patient and is reported.
 
 A finding's side is an attribute, not part of its identity. In EMBED a supplied
 null finding side means bilateral (code `B`) and projects to both breast sides;
-a side column absent from every row leaves the side unknown.
+a side column absent from every row leaves the side unknown. Finding sides list
+the breasts with a finding, not the breasts imaged; an exam's imaged laterality
+comes from its description only, and an underivable one stays unknown rather
+than defaulting to a side.
 
 Procedure identity requires patient, performed date, procedure type, and laterality.
 Pathology uses an explicit patient-scoped record ID or, for MagView rows, the
 identity of the procedure it belongs to. The provisional pathology report date is
 an attribute, never identity. Pathology without a complete procedure or record ID,
 and procedure pathology whose descriptor slots disagree across rows, remain
-unresolved records.
+unresolved records. Unresolved records stay reachable from the patient their row
+names, keep what the row reported, and never take a missing procedure side from
+the finding side.
 Unkeyed histories are patient-scoped reported facts, without inferred event identity.
 Cancer history about a relative is never the patient's own diagnosis or
 genetic result, and no reported history entry is a verified diagnosis.
@@ -121,6 +129,11 @@ in their identity, even when no exam reaches them. Exclusive descendants retain 
 something that stays are deep-copied at the boundary. Linked exams are
 associations, not containment; keys crossing the boundary stay unresolved until
 their targets are present.
+
+Image laterality and view are the source tags; a side or view parsed from the
+series description is exposed separately as recovered, never written over a
+populated tag. Projection-or-reconstruction form and view modification are
+derived values with an unknown state.
 
 Selections are live, non-owning views. Partitions are independent graphs of deep
 copies: the selected entities, what they contain, and their ancestors as context.

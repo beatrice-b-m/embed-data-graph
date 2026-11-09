@@ -12,6 +12,7 @@ from embed_data_graph.clinical.histories import (
     PatientHistoryObservation,
     ProcedureHistoryObservation,
 )
+from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry, UnresolvedClinicalRecord
 from embed_data_graph.core.entity import MutableEntity
 from embed_data_graph.core.graph import ensure_graph
 
@@ -45,11 +46,14 @@ class Patient(MutableEntity):
         Consumer metadata, copied into a dict.
     source : SourceRef or None, optional
         Row the patient was read from.
+    unkeyed_registry_entries : iterable of UnkeyedRegistryEntry, optional
+        Registry records of this patient that have no registry ID.
 
     Notes
     -----
     ``exams`` are the registered exams whose owner is this patient; a patient
-    without a graph has none.
+    without a graph has none. The patient's complete registry record is
+    ``registry_entries`` together with ``unkeyed_registry_entries``.
     """
 
     kind = "patient"
@@ -81,6 +85,7 @@ class Patient(MutableEntity):
         history_observations: Optional[Iterable[PatientHistoryObservation]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
+        unkeyed_registry_entries: Optional[Iterable[UnkeyedRegistryEntry]] = None,
     ) -> None:
         super().__init__()
         self.patient_id = patient_id
@@ -96,6 +101,9 @@ class Patient(MutableEntity):
             self.add_attribute_observation(observation)
         for history in history_observations or ():
             self.add_history_observation(history)
+        self._unkeyed_registry_entries: List[UnkeyedRegistryEntry] = []
+        self._unresolved_clinical: Dict[Any, List[UnresolvedClinicalRecord]] = {}
+        self.set_unkeyed_registry_entries(unkeyed_registry_entries or ())
 
     def _coerce(self, name: str, value: Any) -> Any:
         if name == "patient_id":
@@ -123,21 +131,121 @@ class Patient(MutableEntity):
 
     @property
     def procedures(self) -> Tuple["Procedure", ...]:
-        """Procedures of this patient's exams, once each."""
+        """Procedures of this patient, once each.
 
-        return _unique(procedure for exam in self.exams for procedure in exam.procedures)
+        Procedures whose identity names this patient come first, in
+        registration order, whether or not they are attached to an exam; then
+        those reached through the patient's exams. Rows that could not resolve
+        a procedure identity are in ``unresolved_clinical_records``.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "procedure")
+        return _unique([*named, *(procedure for exam in self.exams for procedure in exam.procedures)])
 
     @property
     def pathology(self) -> Tuple["Pathology", ...]:
-        """Pathology of this patient's exams, once each."""
+        """Pathology of this patient, once each.
 
-        return _unique(item for exam in self.exams for item in exam.pathology)
+        Bundles whose identity names this patient come first, in registration
+        order, whether or not an exam reaches them; then those reached through
+        the patient's exams.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "pathology")
+        return _unique([*named, *(item for exam in self.exams for item in exam.pathology)])
 
     @property
     def registry_entries(self) -> Tuple["CancerRegistryEntry", ...]:
-        """Registry entries assigned to this patient's exams, once each."""
+        """Keyed registry entries of this patient, once each.
 
-        return _unique(entry for exam in self.exams for entry in exam.registry_entries)
+        Entries whose key names this patient come first, in registration
+        order, whether or not any exam is assigned to them. Entries of another
+        patient that are assigned to this patient's exams follow. A patient
+        without a graph has none. Registry rows without a registry ID are in
+        ``unkeyed_registry_entries``.
+        """
+
+        graph = self.graph
+        if graph is None:
+            return ()
+        named = graph._scoped_to(self.patient_id, "registry")
+        return _unique([*named, *(entry for exam in self.exams for entry in exam.registry_entries)])
+
+    @property
+    def unresolved_clinical_records(self) -> Tuple[UnresolvedClinicalRecord, ...]:
+        """Procedure and pathology rows naming this patient whose identity is unresolved.
+
+        Records are grouped by the attachment they were loaded under (this
+        patient for a row without an accession, else its exam, finding or
+        procedure), in the order those attachments were first loaded. A record
+        whose side was not reported has UNKNOWN laterality. Each load replaces
+        the records of the attachments it addresses, as it does in
+        ``graph.unresolved_records``; this is the same data, typed and
+        selected by the patient each row names.
+
+        Examples
+        --------
+        >>> from embed_data_graph import load_embed
+        >>> graph = load_embed(pathology=[{"empi_anon": "P1", "acc_anon": "A1", "numfind": 1,
+        ...     "procdate_anon": "2020-01-02", "type": "B", "path_severity": 0}]).graph
+        >>> (record,) = graph.patient("P1").unresolved_clinical_records
+        >>> record.severity.name, record.laterality.value
+        ('INVASIVE_BREAST_CANCER', 'UNKNOWN')
+        """
+
+        return tuple(record for records in self._unresolved_clinical.values() for record in records)
+
+    def _set_unresolved_clinical(self, address: Any, records: Iterable[UnresolvedClinicalRecord]) -> None:
+        """Replace this patient's records at one unresolved-record address; used by loaders."""
+
+        stored = list(records)
+        if stored:
+            self._unresolved_clinical[address] = stored
+        else:
+            self._unresolved_clinical.pop(address, None)
+
+    @property
+    def unkeyed_registry_entries(self) -> Tuple[UnkeyedRegistryEntry, ...]:
+        """Registry records of this patient without a registry ID, in stored order.
+
+        They are the latest snapshot loaded for this patient. No exam is
+        assigned to them and none is the same record as a keyed entry.
+        """
+
+        return tuple(self._unkeyed_registry_entries)
+
+    def set_unkeyed_registry_entries(
+        self, entries: Iterable[UnkeyedRegistryEntry]
+    ) -> Tuple[UnkeyedRegistryEntry, ...]:
+        """Replace the unkeyed registry snapshot and return the stored records.
+
+        Parameters
+        ----------
+        entries : iterable of UnkeyedRegistryEntry
+            The complete replacement, stored in the given order; empty clears it.
+
+        Returns
+        -------
+        tuple of UnkeyedRegistryEntry
+            The stored records, the same objects that were passed.
+
+        Raises
+        ------
+        TypeError
+            A value is not an UnkeyedRegistryEntry. Nothing changes then.
+        """
+
+        replacement = list(entries)
+        if any(not isinstance(item, UnkeyedRegistryEntry) for item in replacement):
+            raise TypeError("unkeyed registry entries must be UnkeyedRegistryEntry values")
+        self._unkeyed_registry_entries = replacement
+        return tuple(replacement)
 
     def add_exam(self, exam: "Exam") -> "Exam":
         """Make this patient the exam's owner and source claim; return the exam.
@@ -499,6 +607,8 @@ class Patient(MutableEntity):
             "ethnicity": self.ethnicity,
             "attribute_observations": self.attribute_observations,
             "history_observations": self.history_observations,
+            "unkeyed_registry_entries": self.unkeyed_registry_entries,
+            "unresolved_clinical_records": self.unresolved_clinical_records,
             "metadata": self.metadata,
             "source": self.source,
         }
