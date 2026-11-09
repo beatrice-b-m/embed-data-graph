@@ -90,6 +90,10 @@ history; current projection diagnostics are recomputed without mutating the
 graph. Subsets retain load diagnostics addressed to included entities; global
 batch diagnostics remain on the full graph.
 
+ROI `y_min`, `x_min`, `y_stop`, `x_stop` are pixel coordinates with exclusive
+stops, matching Box. The separate source coordinates retain their recorded
+convention; read `source_coordinate_convention` before interpreting them.
+
 ## Types, ownership and cost
 
 All non-key columns are nullable. Logical string/integer/number/boolean types map
@@ -342,8 +346,8 @@ Key: `entity_key`
 | `frame_derivation_method` | string |
 | `y_min` | number |
 | `x_min` | number |
-| `y_max` | number |
-| `x_max` | number |
+| `y_stop` | number |
+| `x_stop` | number |
 | `source_y_min` | number |
 | `source_x_min` | number |
 | `source_y_max` | number |

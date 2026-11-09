@@ -143,3 +143,11 @@ def test_issue_history_is_deduplicated_and_subset_addressed():
     load_embed(exams=[{"acc_anon": "A", "studydate_anon": "2020-01-01"}], into=graph)
     assert graph.load_issues == before
     assert not any(r["code"] == "missing_date" for r in graph.records("issues"))
+
+
+def test_roi_projection_preserves_exclusive_stops_and_source_convention():
+    graph = sample()
+    row, = graph.records("rois")
+    assert (row["y_min"], row["x_min"], row["y_stop"], row["x_stop"]) == (0, 0, 11, 11)
+    assert (row["source_y_max"], row["source_x_max"]) == (10, 10)
+    assert row["source_coordinate_convention"] == "inclusive_maxima"

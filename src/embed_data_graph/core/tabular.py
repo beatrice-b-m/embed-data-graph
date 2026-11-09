@@ -62,12 +62,12 @@ _FIELDS = {
     "pathology": "patient_id record_id performed_date laterality diagnosis result_category malignant severity raw_severity report_documented_date",
     "registry": "patient_id registry_id diagnosis_date laterality source_laterality histology behavior icdo3 primary_site t_stage n_stage m_stage stage_group vital_status",
     "images": "image_id accession_number patient_id source_sop_instance_uid derived_from laterality view_position modality source_modality derived_image_type height width frame_count study_instance_uid series_instance_uid coordinate_frame_id manufacturer series_description view_modifier spot_magnification source_view_position",
-    "rois": "image_id roi_key accession_number patient_id source_path collection_position annotation_source confidence coordinate_frame_id source_coordinate_convention frame_provenance frame_derivation_method y_min x_min y_max x_max source_y_min source_x_min source_y_max source_x_max",
+    "rois": "image_id roi_key accession_number patient_id source_path collection_position annotation_source confidence coordinate_frame_id source_coordinate_convention frame_provenance frame_derivation_method y_min x_min y_stop x_stop source_y_min source_x_min source_y_max source_x_max",
 }
 _DATES = {"exam_date", "performed_date", "diagnosis_date", "report_documented_date"}
 _INTS = {"birth_year", "height", "width", "frame_count", "collection_position", "clock_hour"}
 _NUMBERS = {"patient_age", "total_left_findings", "total_right_findings", "distance_from_nipple_cm",
-            "confidence", "y_min", "x_min", "y_max", "x_max", "source_y_min", "source_x_min", "source_y_max", "source_x_max", "age_at_diagnosis"}
+            "confidence", "y_min", "x_min", "y_stop", "x_stop", "source_y_min", "source_x_min", "source_y_max", "source_x_max", "age_at_diagnosis"}
 _BOOLS = {"contested", "owner_explicit", "malignant", "spot_magnification", "incomplete"}
 _LINKS = {
     "exam_registry": ("exam", "registry_references", "registry"),
@@ -262,7 +262,8 @@ def _entity_row(entity: Any, table: str, graph: DatasetGraph) -> Dict[str, Any]:
         for prefix, box in (("", entity.coordinates), ("source_", entity.source_coordinates)):
             if box is not None:
                 values = box.as_tuple() if hasattr(box, "as_tuple") else box
-                row.update(zip((prefix + n for n in ("y_min", "x_min", "y_max", "x_max")), values))
+                names = ("y_min", "x_min", "y_max", "x_max") if prefix else ("y_min", "x_min", "y_stop", "x_stop")
+                row.update(zip((prefix + n for n in names), values))
     return row
 
 
