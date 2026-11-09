@@ -539,14 +539,18 @@ class UnresolvedClinicalRecord:
     ``Procedure``; pathology needs a record ID or such a procedure. Rows that
     lack them are kept as these records so the patient can still reach their
     results. Missing parts stay missing: an absent procedure side is UNKNOWN
-    and is never filled in from a finding's side.
+    and is never filled in from a finding's side. Invalid-accession rows also
+    use these records (reason ``"invalid_accession"``), even when procedure
+    identity fields are complete; their reported accession is retained but
+    never creates an exam or clinical entity.
 
     Parameters
     ----------
     kind : {"procedure", "pathology"}
         Which grain the row could not resolve.
     reason : str
-        Issue code explaining why, such as ``"incomplete_procedure_identity"``.
+        Issue code explaining why, such as ``"incomplete_procedure_identity"``
+        or ``"invalid_accession"``.
     patient_id : str or None, optional
         Patient named by the row. Default None.
     laterality : Laterality, optional

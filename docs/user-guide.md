@@ -778,3 +778,24 @@ assert (pathology["accession_number"], pathology["finding_number"]) == ("A", "1"
 registry = next(row for row in rows if row["kind"] == "registry")
 assert registry["icdo3"] == "8520/2" and registry["diagnosis_date"].year == 2021
 ```
+
+Invalid-accession pathology remains usable without parsing raw mapped values:
+
+```python
+from embed_data_graph import load_embed
+
+graph = load_embed(magview=[
+    {"empi_anon": "P", "acc_anon": 999, "path_severity": 0.0,
+     "bside": "L", "procdate_anon": "2018-06-10", "type": "BX"},
+    {"empi_anon": "P", "acc_anon": "A", "numfind": None,
+     "side": None, "asses": "A"},
+]).graph
+assert graph.exam("999") is None and graph.pathology == ()
+pathology = next(row for row in graph.records("unresolved")
+                 if row["kind"] == "pathology")
+assert pathology["severity"] == 0 and pathology["performed_date"].year == 2018
+assert pathology["laterality"] == "L" and pathology["reason"] == "invalid_accession"
+finding = graph.exam("A").unkeyed_findings[0]
+assert finding.reported_laterality.value == "B"  # Supplied null means bilateral.
+assert finding.laterality.value == "UNKNOWN"    # No finding identity inferred.
+```

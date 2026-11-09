@@ -198,7 +198,7 @@ def test_unresolved_clinical_rows_retain_reported_exam_and_finding(table, missin
         assert subset.records("unresolved") == graph.records("unresolved")
 
 
-@pytest.mark.parametrize("side, expected", [("R", "R"), ("L", "L"), ("B", "B"), (None, "UNKNOWN"), ("?", "UNKNOWN")])
+@pytest.mark.parametrize("side, expected", [("R", "R"), ("L", "L"), ("B", "B"), (None, "B"), ("?", "UNKNOWN")])
 def test_unkeyed_assessment_exposes_reported_side_without_resolving_identity(side, expected):
     graph = load_embed(magview=[{"empi_anon": "P", "acc_anon": "A", "numfind": None,
                                 "side": side, "asses": "A"}]).graph
