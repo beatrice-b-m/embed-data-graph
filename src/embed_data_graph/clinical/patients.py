@@ -145,9 +145,10 @@ class Patient(MutableEntity):
 
     @property
     def claimed_exams(self) -> Tuple["Exam", ...]:
-        """Owned or source-claimed exams, once each in registration order.
+        """Owned exams first, then remaining source-claimed exams, once each.
 
-        Includes contested exams without assigning ownership. Inspect
+        Each group follows registration order. Includes contested exams without
+        assigning ownership. Inspect
         ``exam.contested`` and ``exam.patient_id`` before attributing results.
         Returns an empty tuple when detached; objects remain live graph members.
         """

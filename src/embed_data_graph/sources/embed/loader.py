@@ -212,7 +212,8 @@ def load_embed(
         sentinel. Pass () to disable. Matching rows remain patient-scoped in
         ``invalid_accession_records`` and graph unresolved records with an
         issue. Refresh replaces addressed patient/table snapshots; merge
-        preserves existing snapshots and reports that no identity can merge.
+        appends incoming unkeyed rows and reports that no identity can deduplicate
+        them. Repeated merge loads therefore retain repeated rows.
 
     Returns
     -------
@@ -427,12 +428,13 @@ def _retain_invalid_accessions(
         for patient_id, records in snapshots.items():
             patient = (graph.patient(patient_id) or (_ensure_patient(graph, patient_id) if records else None)) if patient_id is not None else None
             address = ("invalid_accession", table, ("patient", patient_id))
-            if mode == "merge" and records:
-                issues.append(Issue("unkeyed_merge_requires_identity", "Invalid-accession snapshot preserved in merge",
-                                    context={"patient_id": patient_id, "table": table}))
-                continue
             if mode == "merge":
-                continue
+                if not records:
+                    continue
+                issues.append(Issue("unkeyed_merge_requires_identity", "Incoming invalid-accession rows appended without identity matching",
+                                    context={"patient_id": patient_id, "table": table}))
+                previous = graph.unresolved_records.get(address, ())
+                records = [entry["record"] for entry in previous] + records
             if patient is not None:
                 patient._invalid_accessions[table] = tuple(records)
             if records:
@@ -475,10 +477,11 @@ def _retain_unkeyed_findings(
     for (accession, table), records in snapshots.items():
         exam = _ensure_exam(graph, accession)
         if mode == "merge":
-            if records:
-                issues.append(Issue("unkeyed_merge_requires_identity", "Unkeyed finding snapshot preserved in merge",
-                                    context={"accession_number": accession}))
-            continue
+            if not records:
+                continue
+            issues.append(Issue("unkeyed_merge_requires_identity", "Incoming unkeyed assessments appended without identity matching",
+                                context={"accession_number": accession}))
+            records = [*exam._unkeyed_findings.get(table, ()), *records]
         exam._unkeyed_findings[table] = tuple(records)
         address = ("unkeyed_finding", table, ("exam", accession))
         if records:

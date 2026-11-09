@@ -60,3 +60,18 @@ def test_exam_and_cohort_bindings_refresh_and_conflicts():
     assert graph.patient("P").cohort_number == "3"
     load_embed(exams=[{**row, "total_L_find": None}], into=graph)
     assert exam.total_left_findings is None
+
+
+def test_merge_retains_every_unkeyed_row_without_claiming_deduplication():
+    rows = [{"empi_anon": "P", "acc_anon": "A", "numfind": None, "asses": "A"},
+            {"empi_anon": "P", "acc_anon": 999, "asses": "S"}]
+    graph = load_embed(magview=rows, mode="merge").graph
+    assert len(graph.exam("A").unkeyed_findings) == 1
+    assert len(graph.patient("P").invalid_accession_records) == 1
+    report = load_embed(magview=rows, into=graph, mode="merge")
+    assert len(graph.exam("A").unkeyed_findings) == 2
+    assert len(graph.patient("P").invalid_accession_records) == 2
+    assert sum(i.code == "unkeyed_merge_requires_identity" for i in report.issues) == 2
+    assert len(graph.records("unresolved")) == 4
+    load_embed(magview=rows, into=graph)
+    assert len(graph.records("unresolved")) == 2

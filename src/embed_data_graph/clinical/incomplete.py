@@ -30,7 +30,8 @@ class UnkeyedFinding:
     reason : str
         Machine-readable issue code. Records are snapshot values, not entities;
         repeated identical rows remain separate. Refresh replaces the addressed
-        exam/table snapshot, and merge preserves it with a diagnostic.
+        exam/table snapshot; merge appends every incoming row with a diagnostic
+        because no clinical identity can deduplicate repeated loads.
     """
 
     accession_number: str
@@ -61,8 +62,8 @@ class InvalidAccessionRecord:
         Physical evidence only.
     reason : str
         ``invalid_accession``. These are snapshot records, without semantic IDs;
-        refresh replaces each addressed patient/table snapshot. Merge preserves
-        the previous snapshot and emits a diagnostic.
+        refresh replaces each addressed patient/table snapshot. Merge appends
+        every incoming row and emits a diagnostic; repeated loads retain repeats.
     """
 
     patient_id: Optional[str]

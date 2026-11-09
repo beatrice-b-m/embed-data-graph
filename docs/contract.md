@@ -174,15 +174,15 @@ a contested exam can therefore occur in more than one patient partition.
 with its interpretation and descriptors, `finding_number=None`, and UNKNOWN
 laterality. These are snapshot records, not invented finding entities. Include
 them when reviewing all assessments of an exam. Refresh replaces an addressed
-exam/input-table snapshot; merge preserves it and reports that identity is
-required. Identical unkeyed rows remain separate.
+exam/input-table snapshot; merge appends incoming rows and reports that identity
+is required to deduplicate them. Repeated merge loads retain repeated rows.
 
 `load_embed(invalid_accessions=("999",))` excludes the internal V2 sentinel from
 exam identity by default; pass `()` to disable or supply other values. Such rows
 are retained in `Patient.invalid_accession_records` and `graph.unresolved_records`
 with an `invalid_accession` issue. Missing patient IDs leave them graph-scoped.
-Refresh replaces each addressed patient/input-table snapshot; merge preserves
-it with a diagnostic. Invalid rows never become exams or clinical children.
+Refresh replaces each addressed patient/input-table snapshot; merge appends all
+incoming rows with a diagnostic because no identity can deduplicate them. Invalid rows never become exams or clinical children.
 Mapped values remain available by semantic `grain.field` names. The supported
 record classes live in `embed_data_graph.clinical.incomplete`.
 
