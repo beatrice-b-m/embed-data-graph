@@ -172,8 +172,10 @@ a contested exam can therefore occur in more than one patient partition.
 
 `Exam.unkeyed_findings` retains each assessment row lacking a finding number,
 with its interpretation and descriptors, `finding_number=None`, and UNKNOWN
-laterality. `reported_laterality` separately retains the source side (UNKNOWN
-when missing or unrecognized, never inferred bilateral). These are snapshot records, not invented finding entities. Include
+laterality. `reported_laterality` separately retains the source side: a supplied
+null means BILATERAL under EMBED semantics, just as for keyed findings. An
+absent/unbound side column or unrecognized code stays UNKNOWN. These are
+snapshot records, not invented finding entities. Include
 them when reviewing all assessments of an exam. Refresh replaces an addressed
 exam/input-table snapshot; merge appends incoming rows and reports that identity
 is required to deduplicate them. Repeated merge loads retain repeated rows.
@@ -185,7 +187,14 @@ with an `invalid_accession` issue. Missing patient IDs leave them graph-scoped.
 Refresh replaces each addressed patient/input-table snapshot; merge appends all
 incoming rows with a diagnostic because no identity can deduplicate them. Invalid rows never become exams or clinical children.
 Mapped values remain available by semantic `grain.field` names. The supported
-record classes live in `embed_data_graph.clinical.incomplete`.
+record classes live in `embed_data_graph.clinical.incomplete`. Reported procedure
+and pathology facts on invalid rows are additionally normalized into
+`UnresolvedClinicalRecord` values under `Patient.unresolved_clinical_records`
+and the graph unresolved table, with reason `invalid_accession`. They retain
+the reported invalid accession and follow the same refresh/merge snapshot as
+the raw wrapper. No typed record is emitted for a grain without reported facts.
+The wrapper and typed records describe the same source row, not independent
+clinical events.
 
 Exam bindings include `accession_type`, `total_left_findings` (`total_L_find`),
 and `total_right_findings` (`total_R_find`). The patient `cohort_number`

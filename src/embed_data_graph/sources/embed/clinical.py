@@ -460,6 +460,26 @@ def _record_attachment(attachment: Attachment, row: Mapping[str, Any], columns: 
     return ("patient", patient_id) if patient_id is not None else None
 
 
+def _invalid_accession_clinical_records(
+    row: Mapping[str, Any], table: str, columns: Mapping[str, ColumnMap],
+) -> Tuple[UnresolvedClinicalRecord, ...]:
+    """Normalize reported clinical evidence without creating any entity."""
+
+    if table not in {"magview", "procedures", "pathology"}:
+        return ()
+    procedure_columns = columns["pathology" if table == "pathology" else "procedures"]
+    records = []
+    if any(cell(row, procedure_columns.get(name)) is not None
+           for name in ("performed_date", "procedure_date", "procedure_type", "laterality")):
+        records.append(_unresolved_record("procedure", "invalid_accession", dict(row), procedure_columns))
+    if table in {"magview", "pathology"}:
+        pathology_columns = columns["pathology"]
+        facts, descriptors = normalize_pathology(row, pathology_columns)
+        if facts or descriptors or cell(row, pathology_columns.get("record_id")) is not None:
+            records.append(_unresolved_record("pathology", "invalid_accession", dict(row), pathology_columns))
+    return tuple(records)
+
+
 def _unresolved_record(
     kind: str, reason: str, payload: Dict[str, Any], columns: ColumnMap
 ) -> UnresolvedClinicalRecord:

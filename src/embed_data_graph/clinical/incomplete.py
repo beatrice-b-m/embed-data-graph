@@ -27,7 +27,9 @@ class UnkeyedFinding:
         Always UNKNOWN: a missing number cannot establish a side-level finding.
     reported_laterality : Laterality, optional
         Side reported by this row, independent of finding identity. Default
-        UNKNOWN; missing or unrecognized values remain UNKNOWN, never bilateral.
+        UNKNOWN for direct construction. The EMBED loader reads a supplied
+        null side as BILATERAL, just as for keyed findings; absent/unbound
+        columns and unrecognized codes stay UNKNOWN.
         This source fact may be used for side-level assessment review.
     finding_number : None
         Explicitly missing.
@@ -72,6 +74,9 @@ class InvalidAccessionRecord:
         ``invalid_accession``. These are snapshot records, without semantic IDs;
         refresh replaces each addressed patient/table snapshot. Merge appends
         every incoming row and emits a diagnostic; repeated loads retain repeats.
+        Reported procedure/pathology facts are also retained as typed
+        UnresolvedClinicalRecord values in the patient and graph views; the
+        raw wrapper and typed facts represent the same source evidence.
     """
 
     patient_id: Optional[str]

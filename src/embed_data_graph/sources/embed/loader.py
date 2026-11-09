@@ -25,6 +25,7 @@ from embed_data_graph.clinical.histories import (
 )
 from embed_data_graph.clinical.interpretations import ImagingInterpretation
 from embed_data_graph.clinical.patients import Patient
+from embed_data_graph.clinical.pathology import UnresolvedClinicalRecord
 from embed_data_graph.core.anatomy import AnatomicalPosition, Quadrant
 from embed_data_graph.core.codes import Code, Vocabulary
 from embed_data_graph.core.graph import DatasetGraph
@@ -211,7 +212,9 @@ def load_embed(
         Values excluded from exam identity; default ("999",), the internal V2
         sentinel. Pass () to disable. Matching rows remain patient-scoped in
         ``invalid_accession_records`` and graph unresolved records with an
-        issue. Refresh replaces addressed patient/table snapshots; merge
+        issue. Reported procedure/pathology facts also become typed patient-scoped
+        unresolved clinical records; they never create exams or clinical entities.
+        Refresh replaces addressed patient/table snapshots; merge
         appends incoming unkeyed rows and reports that no identity can deduplicate
         them. Repeated merge loads therefore retain repeated rows.
 
@@ -400,10 +403,13 @@ def _retain_invalid_accessions(
     columns: Mapping[str, Mapping[str, Optional[str]]], invalid: set[Optional[str]],
     mode: str, parents: str, issues: list[Issue],
 ) -> dict[str, list[_InputRow]]:
+    from embed_data_graph.sources.embed.clinical import _invalid_accession_clinical_records
+
     result: dict[str, list[_InputRow]] = {}
     for table, rows in tables.items():
         result[table] = []
         snapshots: dict[Optional[str], list[InvalidAccessionRecord]] = {}
+        clinical_snapshots: dict[Optional[str], list[UnresolvedClinicalRecord]] = {}
         for row in rows:
             cmap = columns[table]
             accession = _id_at(row.mapping, cmap.get("accession"))
@@ -423,6 +429,9 @@ def _retain_invalid_accessions(
                       if physical is not None and physical in row.mapping}
             record = InvalidAccessionRecord(patient_id, accession, table, values, row.source)
             snapshots.setdefault(patient_id, []).append(record)
+            clinical_snapshots.setdefault(patient_id, []).extend(
+                _invalid_accession_clinical_records(row.mapping, table, columns)
+            )
             issues.append(Issue("invalid_accession", "Invalid accession retained without an exam identity",
                                 source=row.source, context={"patient_id": patient_id, "accession_number": accession, "table": table}))
         for patient_id, records in snapshots.items():
@@ -441,6 +450,18 @@ def _retain_invalid_accessions(
                 graph.unresolved_records[address] = [{"record": r, "reason": r.reason, "kind": table} for r in records]
             else:
                 graph.unresolved_records.pop(address, None)
+            clinical_address = ("invalid_accession_clinical", table, ("patient", patient_id))
+            clinical_records = clinical_snapshots.get(patient_id, [])
+            if mode == "merge":
+                clinical_records = [entry["record"] for entry in graph.unresolved_records.get(clinical_address, ())] + clinical_records
+            if patient is not None:
+                patient._set_unresolved_clinical(clinical_address, clinical_records)
+            if clinical_records:
+                graph.unresolved_records[clinical_address] = [
+                    {"record": r, "reason": r.reason, "kind": r.kind} for r in clinical_records
+                ]
+            else:
+                graph.unresolved_records.pop(clinical_address, None)
     return result
 
 
@@ -470,7 +491,10 @@ def _retain_unkeyed_findings(
                                        _decoder(vocabulary.RECOMMENDATION)(raw("recommendation")), row.source),
             {name: _decoder(vocab)(raw(name)) for name, vocab in FINDING_DESCRIPTORS.items() if not is_missing(raw(name))},
             row.source,
-            reported_laterality=Laterality.coerce(text(raw("laterality"))),
+            reported_laterality=_finding_laterality(
+                {"laterality": None if is_missing(raw("laterality")) else Laterality.coerce(raw("laterality"))},
+                {}, [row], columns,
+            ),
         )
         snapshots[(accession, row.table)].append(record)
         issues.append(Issue("missing_finding_identity", "Assessment retained on exam without finding number or side",

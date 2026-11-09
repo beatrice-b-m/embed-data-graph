@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Incomplete source normalization fixes (#26)
+
+- Retain typed procedure/pathology evidence on invalid-accession rows alongside
+  raw mapped values, without creating exams or clinical entities.
+- Apply the keyed EMBED side rule to unkeyed `reported_laterality`: a supplied
+  null is bilateral; absent/unbound columns and unrecognized codes are unknown.
+  Consumers that treated all unkeyed null sides as unknown should use the
+  corrected reported side; unresolved `laterality` itself remains UNKNOWN.
+
 ### Incomplete-record projection fixes (#24)
 
 - Preserve reported exam and finding identifiers on unresolved clinical records,

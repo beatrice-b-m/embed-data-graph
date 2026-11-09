@@ -62,8 +62,9 @@ explicit columns on incomplete clinical records, including when the referenced
 finding is absent. Consumers do not need to parse opaque addresses.
 
 Unkeyed findings retain UNKNOWN `laterality` and null `finding_number`; their
-`reported_laterality` preserves the source side independently of identity. Missing
-or unrecognized source sides stay UNKNOWN and are never treated as bilateral.
+`reported_laterality` preserves the source side independently of identity. A
+supplied null side is BILATERAL (`B`), consistent with keyed EMBED findings;
+an absent/unbound column or unrecognized code stays UNKNOWN.
 Unkeyed registry entries expose every typed registry fact in `unresolved`,
 including parsed `diagnosis_date`, normalized histology/behavior and `icdo3`,
 source and normalized laterality, stages, receptors and vital status. Their
@@ -75,7 +76,12 @@ contents plus an occurrence number for identical rows. It identifies a snapshot
 occurrence only, never a clinical identity or cross-load match. Duplicates stay
 visible. `unresolved_values` exposes their remaining semantic leaves; raw physical
 clinical-row payloads are excluded. Invalid-accession mapped values retain their
-`grain.field` names. A missing patient is null, not an inferred owner.
+`grain.field` names. Invalid-accession procedure/pathology facts also appear as
+typed `procedure`/`pathology` rows with reason `invalid_accession`, normalized
+severity and codes, and parsed dates. These and the raw wrapper describe the
+same source evidence; they are not distinct clinical events. Their reported
+invalid accession never becomes an exam key. A missing patient is null, not
+an inferred owner.
 
 For entity rows, `incomplete` marks a missing resolved parent/owner, or pathology
 with no procedure date/side in its identity. It does not certify clinical
@@ -90,7 +96,8 @@ Unparseable, out-of-range and missing dates become null and produce `invalid_dat
 or `missing_date` rows in `issues`. For the shared `unresolved` schema, only
 applicable fields are checked: registry diagnosis date; procedure performed
 date; pathology performed and report-documented dates. Unkeyed findings and
-invalid-accession records have no applicable date columns. Other date columns
+raw invalid-accession wrappers have no applicable date columns. Their typed
+clinical records use the ordinary procedure/pathology date checks. Other date columns
 remain null without emitting diagnostics. Source date text is still retained in the
 supplementary values table for audit. No ambiguous formats are guessed.
 

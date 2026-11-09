@@ -370,3 +370,10 @@ column lists, datetime rules, supplementary tables and key encoding.
 reported parent identifiers. `UnkeyedFinding.reported_laterality` is the source
 side, distinct from its unresolved `laterality`. These facts, plus all typed
 registry facts for unkeyed registry entries, are columns of `unresolved`.
+
+Invalid-accession clinical evidence is normalized into the existing
+`Patient.unresolved_clinical_records` and tabular `unresolved` interfaces,
+including severity, procedure code and dates. The raw
+`Patient.invalid_accession_records` remain available. For unkeyed findings,
+`reported_laterality` follows the keyed EMBED null-side rule: supplied null
+is bilateral; absent/unbound and unrecognized sides are UNKNOWN.
