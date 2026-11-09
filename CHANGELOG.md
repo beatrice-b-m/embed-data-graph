@@ -4,6 +4,12 @@
 
 ### Added
 
+- `Exam.imaged_laterality`, the `Laterality` of the breasts an exam imaged
+  (LEFT, RIGHT, BILATERAL or UNKNOWN). It is read from the exam description by
+  case-insensitive substrings in order (`bil`, then `left`, then `right`), the
+  rule EMBED cohort pipelines use, never from findings or images.
+  `Exam.breast_sides` is unchanged: it lists sides with a finding or image,
+  which is not the set of breasts imaged.
 - `UnresolvedClinicalRecord`, exported at the root, and
   `Patient.unresolved_clinical_records`. A procedure or pathology row that
   cannot resolve its identity (a missing side, date or type, or disagreeing
