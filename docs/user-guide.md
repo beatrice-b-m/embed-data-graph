@@ -360,7 +360,7 @@ The supported default map is:
 | `hormone_history` | patient `empi_anon`; category/code `type`/`code`; accession `acc_anon`; timing `first_age`, `mfirst`, `yfirst`, `last_age`, `mlast`, `ylast` |
 | `procedure_history` | patient `empi_anon`; category/procedure `type`/`pcode`; accession `acc_anon`; laterality `side`; result `result` |
 | `cancer_history` | patient `empi_anon`; accession `acc_anon`; subject `patient` (1 patient, 0 relative); relationship `rel`; category/code `type`/`cancercode` (source codes, no meanings); raw text `side`, `bilat`, `premen`, `diag_age`, `month`, `year`, `curr_age`, `brca1`, `brca2`, `comment` |
-| `registry` | patient/entry identity `empi_anon`/`cancer_outcome_registry_id` (a row without the entry ID is an unkeyed patient record); payload is unbound by default |
+| `registry` | patient/entry identity `empi_anon`/`cancer_outcome_registry_id` (a row without the entry ID is an unkeyed patient record); payload `DATE_OF_DIAGNOSIS_ANON`, `LATERALITY`, `HISTOLOGY_ICDO3`, `BEHAVIOR_ICDO3`, `PRIMARY_SITE`, `T_Stage`, `N_Stage`, `M_Stage`, `STAGE_GRP`, `ESTROGEN_RECEPTOR`, `PROGESTERONE_RECEPTOR`, `HER2`, `VITAL_STATUS`, read through typed entry properties |
 | `magview` | patient/accession/finding `empi_anon`/`acc_anon`/`numfind`; registry assignment `cancer_outcome_registry_id`; linked accession `linkedaccession_anon` |
 
 `DEFAULT_COLUMNS` is the authoritative mapping object; the table above is a
@@ -392,9 +392,13 @@ The MagView `mass`, `asymmetry`, `arch_distortion` and `calc`
 columns were computed by a legacy labeling rule rather than recorded by
 radiologists, so they are not loaded as source flags. To load them as legacy
 values, bind the `findings` fields `mass`, `asymmetry`,
-`architectural_distortion` and `calcification` explicitly. The registry identity binding is deliberately narrower than
-the rest of its possible payload. Map additional registry payload fields only
-when their source meanings are established.
+`architectural_distortion` and `calcification` explicitly.
+
+Registry entries read their payload through typed
+properties such as `entry.laterality`, `entry.icdo3` and `entry.her2`; registry
+laterality codes 3, 5 and 9 load as an UNKNOWN side rather than being dropped.
+Map additional registry payload fields only when their source meanings are
+established.
 
 ## Clinical relationships
 

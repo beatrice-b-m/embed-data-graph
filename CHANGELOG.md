@@ -4,6 +4,14 @@
 
 ### Added
 
+- Registry payload bindings for the internal registry file:
+  `DATE_OF_DIAGNOSIS_ANON`, `LATERALITY`, `HISTOLOGY_ICDO3`, `BEHAVIOR_ICDO3`,
+  `PRIMARY_SITE`, `T_Stage`, `N_Stage`, `M_Stage`, `STAGE_GRP`,
+  `ESTROGEN_RECEPTOR`, `PROGESTERONE_RECEPTOR`, `HER2` and `VITAL_STATUS`, read
+  through typed properties on `CancerRegistryEntry` and `UnkeyedRegistryEntry`
+  (`diagnosis_date`, `laterality`, `icdo3`, `primary_site`, stages, receptors,
+  `vital_status`). Registry laterality codes 0, 3, 5 and 9 load as an UNKNOWN
+  side rather than being dropped; receptors keep their source codes.
 - A `body_measurements` table input for the dated measurement table
   (`magview_bmi_anon`), bound by default to `empi_anon`,
   `collection_date_anon`, `height_inches`, `weight_pounds` and `bmi`. Each

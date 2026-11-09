@@ -73,5 +73,7 @@ assert_type(
     Patient("P").set_unkeyed_registry_entries([UnkeyedRegistryEntry({"site": "C50"})]),
     Tuple[UnkeyedRegistryEntry, ...],
 )
+assert_type(CancerRegistryEntry("P", "1").laterality, Laterality)
+assert_type(UnkeyedRegistryEntry().icdo3, Optional[str])
 assert_type(Patient("P").unresolved_clinical_records, Tuple[UnresolvedClinicalRecord, ...])
 assert_type(Patient("P").procedures[0].identity.laterality, Laterality)

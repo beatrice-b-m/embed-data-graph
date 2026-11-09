@@ -296,7 +296,23 @@ Targets are never deleted by clearing associations. Registry keys remain
 
 Registry identity maps `patient_id` to `empi_anon` and `registry_id` to
 `cancer_outcome_registry_id`, the same columns as the MagView assignment pointer.
-Payload fields are unbound by default and can be configured through `columns`.
+The payload binds the registry file's `DATE_OF_DIAGNOSIS_ANON`, `LATERALITY`,
+`HISTOLOGY_ICDO3`, `BEHAVIOR_ICDO3`, `PRIMARY_SITE`, `T_Stage`, `N_Stage`,
+`M_Stage`, `STAGE_GRP`, `ESTROGEN_RECEPTOR`, `PROGESTERONE_RECEPTOR`, `HER2` and
+`VITAL_STATUS` by default; the generic pathology-style payload fields stay
+unbound. Values are kept as reported in `payload`, with its refresh, merge and
+conflict rules, and both `CancerRegistryEntry` and `UnkeyedRegistryEntry` read
+them through typed properties: `diagnosis_date` (ISO text; it may be the
+surgery date rather than the biopsy date, so keep its registry source),
+`laterality` (1 right, 2 left, 4 bilateral; 0, 3, 5, 9 and missing are UNKNOWN,
+never dropped) with `source_laterality`, `histology`, `behavior`, `icdo3`
+(`histology/behavior`), `primary_site`, `t_stage`, `n_stage`, `m_stage`,
+`stage_group`, `vital_status`, and `estrogen_receptor`,
+`progesterone_receptor` and `her2` as source codes without meanings. The
+catalog states ER and PR codes as 0 negative, 1 positive, 7 test ordered with
+the result unavailable and 9 undocumented; HER2 uses them except that 0 means
+negative or equivocal, and its code 30 is unresolved. Receptors describe the
+registry tumor record and are outcome annotations, not index-time inputs.
 Caller-supplied registry inputs do not require a physical table name.
 
 Every registry row with a patient is a registry record of that patient.

@@ -361,3 +361,56 @@ def test_unkeyed_registry_records_travel_with_patient_partitions_and_export():
     copied = part.patient("P").unkeyed_registry_entries
     assert len(copied) == 1 and copied[0] is not graph.patient("P").unkeyed_registry_entries[0]
     assert part.to_dict()["patient"][0]["unkeyed_registry_entries"] == [{"payload": {}, "source": None}]
+
+
+def full_registry_row(registry_id="7", **fields):
+    return {
+        "empi_anon": "P", "cancer_outcome_registry_id": registry_id, "DATE_OF_DIAGNOSIS_ANON": "2020-01-02",
+        "LATERALITY": 2, "HISTOLOGY_ICDO3": 8500.0, "BEHAVIOR_ICDO3": 3, "PRIMARY_SITE": "C504",
+        "T_Stage": "1c", "N_Stage": "0", "M_Stage": "0", "STAGE_GRP": "1A", "ESTROGEN_RECEPTOR": 1,
+        "PROGESTERONE_RECEPTOR": 0, "HER2": 0, "VITAL_STATUS": 1, **fields,
+    }
+
+
+def test_registry_payload_loads_with_typed_views_by_default():
+    graph = DatasetGraph()
+    load(graph, registry=[full_registry_row()])
+
+    entry = graph.registry_entry("P", "7")
+    assert entry.diagnosis_date == "2020-01-02"
+    assert (entry.laterality.value, entry.source_laterality) == ("L", "2")
+    assert (entry.histology, entry.behavior, entry.icdo3, entry.primary_site) == ("8500", "3", "8500/3", "C504")
+    assert (entry.t_stage, entry.n_stage, entry.m_stage, entry.stage_group) == ("1c", "0", "0", "1A")
+    assert [code.code for code in (entry.estrogen_receptor, entry.progesterone_receptor, entry.her2)] == ["1", "0", "0"]
+    assert entry.her2.meaning is None and entry.vital_status == "1"
+
+
+@pytest.mark.parametrize("code", [3, 5, 9, 0, None])
+def test_unspecified_registry_sides_load_as_unknown_and_are_kept(code):
+    graph = DatasetGraph()
+    load(graph, registry=[full_registry_row(LATERALITY=code), full_registry_row(None, LATERALITY=code)])
+
+    patient = graph.patient("P")
+    (keyed,) = patient.registry_entries
+    (unkeyed,) = patient.unkeyed_registry_entries
+    assert keyed.laterality.value == unkeyed.laterality.value == "UNKNOWN"
+    assert keyed.icdo3 == unkeyed.icdo3 == "8500/3"
+
+
+def test_registry_dates_from_timestamps_read_as_iso_days():
+    from datetime import datetime
+
+    graph = DatasetGraph()
+    load(graph, registry=[full_registry_row(DATE_OF_DIAGNOSIS_ANON=datetime(2021, 5, 6, 0, 0))])
+
+    assert graph.registry_entry("P", "7").diagnosis_date == "2021-05-06"
+
+
+def test_conflicting_registry_rows_make_the_field_unknown():
+    graph = DatasetGraph()
+    issues = load(graph, registry=[full_registry_row(), full_registry_row(LATERALITY=1)])
+
+    entry = graph.registry_entry("P", "7")
+    assert entry.laterality.value == "UNKNOWN" and entry.source_laterality is None
+    assert entry.histology == "8500"
+    assert "conflicting_clinical_values" in {issue.code for issue in issues}
