@@ -153,6 +153,20 @@ attachment the adapter could establish, never keyed by a row position. When rows
 of one procedure disagree on a descriptor slot, the bundle is unresolved because
 only a record ID could tell the reports apart. Within an addressed attachment's
 refresh, unresolved snapshots replace earlier ones; no replay ledger accumulates.
+A pathology row also addresses its own exam or finding, so a corrected row that
+now resolves clears what an earlier incomplete row left there.
+
+Each unresolved entry carries a typed `record`, an `UnresolvedClinicalRecord`
+with the reported patient, procedure date, type and side, and for pathology the
+severity, raw severity, report date and descriptor slots. Missing parts stay
+missing: an unreported procedure side is `Laterality.UNKNOWN` and is never taken
+from the finding side. A row without an accession is kept under
+`("patient", patient_id)` rather than unattached. `patient.unresolved_clinical_records`
+lists the records whose rows name the patient, so a cancer result on a
+procedure without a side, date or type is reachable from the patient, with its
+`incomplete_procedure_identity` or `incomplete_pathology_identity` issue naming
+the patient. `patient.procedures` and `patient.pathology` likewise include
+resolved procedures and bundles that name the patient but no exam reaches.
 
 `path_severity` loads as `PathologySeverity`, an inverse scale on which 0 is
 invasive breast cancer and 5 non-breast cancer; code 6 is invalid and kept only
@@ -166,9 +180,19 @@ per exam context; choose among them with `Patient.attribute_as_of`.
 
 The eight graph entities are Patient, Exam, Finding, Procedure, Pathology,
 CancerRegistryEntry, MammogramImage and RegionOfInterest. Interpretations and
-history observations are mutable values stored on their entity. BreastSide,
+history observations and unkeyed registry entries are mutable values stored on
+their entity. BreastSide,
 ProcedureIdentity, PatientAttributeObservation, PathologyObservation,
 ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values.
+
+`exam.imaged_laterality` is the `Laterality` of the breasts an exam imaged:
+LEFT, RIGHT, BILATERAL or UNKNOWN, with `.expand()` giving the sides. No EMBED
+column records it. The exam description is searched case-insensitively for the
+substrings `bil` (BILATERAL), else `left` (LEFT), else `right` (RIGHT), else it
+is UNKNOWN; the order settles descriptions that name several sides. Finding
+sides and image laterality are never used: findings list breasts with a finding,
+and image metadata may cover only part of an exam. UNKNOWN never defaults to a
+side. It is computed on each access.
 
 ## Imaging and supplied association collections
 
@@ -234,9 +258,21 @@ Targets are never deleted by clearing associations. Registry keys remain
 (patient_id, registry_id), even when exam ownership differs.
 
 Registry identity maps `patient_id` to `empi_anon` and `registry_id` to
-`cancer_registry_id`. Payload fields are unbound by default and can be configured
-through `columns`. Caller-supplied registry inputs do not require a physical table
-name. MagView assignment IDs use `cancer_outcome_registry_id`.
+`cancer_outcome_registry_id`, the same columns as the MagView assignment pointer.
+Payload fields are unbound by default and can be configured through `columns`.
+Caller-supplied registry inputs do not require a physical table name.
+
+Every registry row with a patient is a registry record of that patient.
+`patient.registry_entries` lists the keyed entries that name the patient,
+whether or not an exam is assigned to them, followed by entries of other
+patients assigned to the patient's exams. A row without a registry ID becomes an
+`UnkeyedRegistryEntry` in `patient.unkeyed_registry_entries`, reported once per
+call by the INFO issue `unkeyed_registry_entries` with the row count. Unkeyed
+records are values on the patient, not graph entities: no exam is assigned to
+them and none is matched to a keyed entry. Refresh replaces the unkeyed records
+of every patient the rows address, so they clear once all of a patient's rows
+carry IDs; merge preserves them and reports a `registry_merge_requires_registry_id`
+warning. A row without a patient remains `incomplete_registry_identity`.
 
 ## Validation
 

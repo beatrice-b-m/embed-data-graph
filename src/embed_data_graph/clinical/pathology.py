@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from enum import IntEnum
 from typing import Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Tuple
 
 from embed_data_graph.core.codes import Code
-from embed_data_graph.core.entity import MutableEntity, Reference
+from embed_data_graph.core.entity import MutableEntity, Reference, plain_value
+from embed_data_graph.core.primitives import Laterality
 from embed_data_graph.core.source import SourceRef, optional_source
 
 
@@ -341,6 +342,127 @@ class CancerRegistryEntry(MutableEntity):
             "metadata": self.metadata,
             "source": self.source,
         }
+
+
+@dataclass
+class UnkeyedRegistryEntry:
+    """A patient's cancer-registry record that has no registry ID.
+
+    Registry rows without a registry ID are real registry records, but no
+    exam can be assigned to them and no key identifies them across loads. The
+    owning ``Patient`` stores them as a snapshot in
+    ``Patient.unkeyed_registry_entries``; they are values, not graph entities,
+    and are never inferred to be the same record as a keyed entry.
+
+    Parameters
+    ----------
+    payload : mapping, optional
+        Explicitly mapped registry fields, copied into a dict. Default empty.
+    source : SourceRef or None, optional
+        Row the record was read from. Default None.
+
+    Examples
+    --------
+    >>> entry = UnkeyedRegistryEntry({"diagnosis_date": "2020-03-01"})
+    >>> entry.to_dict()
+    {'payload': {'diagnosis_date': '2020-03-01'}, 'source': None}
+    """
+
+    payload: Dict[str, Any] = field(default_factory=dict)
+    """Explicitly mapped registry fields."""
+    source: Optional[SourceRef] = None
+    """Row the record was read from."""
+
+    def __post_init__(self) -> None:
+        if self.payload is not None and not isinstance(self.payload, Mapping):
+            raise TypeError("payload must be a mapping")
+        self.payload = dict(self.payload or {})
+        self.source = optional_source(self.source)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the record as JSON-compatible values."""
+
+        return {"payload": plain_value(self.payload), "source": plain_value(self.source)}
+
+
+@dataclass
+class UnresolvedClinicalRecord:
+    """A procedure or pathology row whose clinical identity could not be resolved.
+
+    A procedure needs its patient, date, type and a known side to be a
+    ``Procedure``; pathology needs a record ID or such a procedure. Rows that
+    lack them are kept as these records so the patient can still reach their
+    results. Missing parts stay missing: an absent procedure side is UNKNOWN
+    and is never filled in from a finding's side.
+
+    Parameters
+    ----------
+    kind : {"procedure", "pathology"}
+        Which grain the row could not resolve.
+    reason : str
+        Issue code explaining why, such as ``"incomplete_procedure_identity"``.
+    patient_id : str or None, optional
+        Patient named by the row. Default None.
+    laterality : Laterality, optional
+        Procedure side as reported; default UNKNOWN when missing.
+    performed_date : str or None, optional
+        Reported procedure date. Default None.
+    procedure_type : Code or None, optional
+        Reported procedure type. Default None.
+    severity : PathologySeverity or None, optional
+        Pathology severity group for pathology rows. Default None.
+    raw_severity : Any, optional
+        Severity as supplied, including out-of-scale codes. Default None.
+    report_documented_date : str or None, optional
+        Provisional pathology report date. Default None.
+    descriptors : tuple of PathologyObservation, optional
+        Pathology descriptor slots in slot order. Default empty.
+    payload : mapping, optional
+        The source row as supplied, copied into a dict. Default empty.
+
+    Notes
+    -----
+    A missing severity is not a benign result. These records are not graph
+    entities and have no identity across loads; each load replaces the records
+    of the attachments it addresses.
+    """
+
+    kind: str
+    """``"procedure"`` or ``"pathology"``."""
+    reason: str
+    """Issue code explaining why the identity is unresolved."""
+    patient_id: Optional[str] = None
+    """Patient named by the row."""
+    laterality: Laterality = Laterality.UNKNOWN
+    """Procedure side as reported; UNKNOWN when missing."""
+    performed_date: Optional[str] = None
+    """Reported procedure date."""
+    procedure_type: Optional[Code] = None
+    """Reported procedure type."""
+    severity: Optional[PathologySeverity] = None
+    """Pathology severity group; None is not a benign result."""
+    raw_severity: Any = None
+    """Severity as supplied."""
+    report_documented_date: Optional[str] = None
+    """Provisional pathology report date."""
+    descriptors: Tuple[PathologyObservation, ...] = ()
+    """Pathology descriptor slots in slot order."""
+    payload: Dict[str, Any] = field(default_factory=dict)
+    """The source row as supplied."""
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"procedure", "pathology"}:
+            raise ValueError("kind must be 'procedure' or 'pathology'")
+        self.reason = _required_text(self.reason, "reason")
+        self.laterality = Laterality.coerce(self.laterality)
+        self.procedure_type = Code.coerce(self.procedure_type)
+        self.descriptors = tuple(self.descriptors)
+        self.payload = dict(self.payload or {})
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the record as JSON-compatible values."""
+
+        return {item.name: plain_value(getattr(self, item.name)) for item in fields(self)}
 
 
 def _required_text(value: Any, name: str) -> str:

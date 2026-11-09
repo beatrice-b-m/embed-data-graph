@@ -20,7 +20,10 @@ clinical roots, grouped by `DatasetGraph` for membership and lookup. Constructio
 and updates use patient and semantic indexes to avoid scanning unrelated objects.
 
 Linked exams and registry assignments preserve source-supplied relationships.
-A registry entry is patient-scoped and may be assigned to multiple exams. Missing
+A registry entry is patient-scoped and may be assigned to multiple exams; a
+patient reaches its entries whether or not any exam is assigned to them. A
+registry row without a registry ID is kept as an unkeyed record of its patient,
+never matched to a keyed entry or given an inferred identity. Missing
 endpoints remain inspectable references and resolve when their objects arrive.
 The adapter preserves assignments without rerunning matching or inferring diagnoses.
 
@@ -44,14 +47,19 @@ disagrees with its EMBED path claims the column's patient and is reported.
 
 A finding's side is an attribute, not part of its identity. In EMBED a supplied
 null finding side means bilateral (code `B`) and projects to both breast sides;
-a side column absent from every row leaves the side unknown.
+a side column absent from every row leaves the side unknown. Finding sides list
+the breasts with a finding, not the breasts imaged; an exam's imaged laterality
+comes from its description only, and an underivable one stays unknown rather
+than defaulting to a side.
 
 Procedure identity requires patient, performed date, procedure type, and laterality.
 Pathology uses an explicit patient-scoped record ID or, for MagView rows, the
 identity of the procedure it belongs to. The provisional pathology report date is
 an attribute, never identity. Pathology without a complete procedure or record ID,
 and procedure pathology whose descriptor slots disagree across rows, remain
-unresolved records.
+unresolved records. Unresolved records stay reachable from the patient their row
+names, keep what the row reported, and never take a missing procedure side from
+the finding side.
 Unkeyed histories are patient-scoped reported facts, without inferred event identity.
 
 An image's mutable `image_id` is separate from its source SOP UID and path aliases.
