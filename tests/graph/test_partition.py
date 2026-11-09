@@ -161,7 +161,7 @@ def test_a_link_recorded_only_outside_the_partition_stays_visible():
 def patient_scoped_graph():
     return load_embed(
         magview=[{"empi_anon": "P1", "acc_anon": "A1", "numfind": 1, "cancer_outcome_registry_id": 1}],
-        registry=[{"empi_anon": "P1", "cancer_registry_id": 1}, {"empi_anon": "P1", "cancer_registry_id": 2}],
+        registry=[{"empi_anon": "P1", "cancer_outcome_registry_id": 1}, {"empi_anon": "P1", "cancer_outcome_registry_id": 2}],
         procedures=[{"empi_anon": "P1", "procdate_anon": "2020-01-01", "type": "B", "bside": "L"}],
     ).graph
 
