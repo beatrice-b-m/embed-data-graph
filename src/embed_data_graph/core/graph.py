@@ -85,6 +85,7 @@ class DatasetGraph:
         self._entities: Dict[str, Dict[Hashable, Any]] = {kind: {} for kind in KINDS}
         self._referrers: Dict[Tuple[str, Hashable], Dict[Tuple[int, str], MutableEntity]] = defaultdict(dict)
         self._aliases: Dict[str, Dict[Hashable, MutableEntity]] = defaultdict(dict)
+        self._scoped: Dict[str, Dict[int, MutableEntity]] = defaultdict(dict)
         self._context: Set[int] = set()
         self.unresolved_records: Dict[Any, Any] = {}
 
@@ -318,6 +319,9 @@ class DatasetGraph:
                 self._referrers[(ref.kind, target)][(id(entity), ref.field)] = entity
         for index, alias, _ in _aliases(entity, {}):
             self._aliases[index][alias] = entity
+        patient_id = entity._scope_patient_id()
+        if patient_id is not None:
+            self._scoped[patient_id][id(entity)] = entity
 
     def _unindex(self, entity: MutableEntity) -> None:
         registry = self._entities[entity.kind]
@@ -333,6 +337,17 @@ class DatasetGraph:
         for index, alias, _ in _aliases(entity, {}):
             if self._aliases[index].get(alias) is entity:
                 del self._aliases[index][alias]
+        patient_id = entity._scope_patient_id()
+        if patient_id is not None and patient_id in self._scoped:
+            scoped = self._scoped[patient_id]
+            scoped.pop(id(entity), None)
+            if not scoped:
+                del self._scoped[patient_id]
+
+    def _scoped_to(self, patient_id: str, kind: str) -> Tuple[Any, ...]:
+        """Entities of ``kind`` that name ``patient_id`` in their own identity."""
+
+        return tuple(entity for entity in self._scoped.get(patient_id, {}).values() if entity.kind == kind)
 
     def _check_available(self, planned: Dict[int, Tuple[MutableEntity, Dict[str, Any]]]) -> None:
         """Reject planned keys or unique aliases that another entity holds."""

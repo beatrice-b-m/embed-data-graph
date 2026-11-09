@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Tuple
 
 from embed_data_graph.core.codes import Code
-from embed_data_graph.core.entity import MutableEntity, Reference
+from embed_data_graph.core.entity import MutableEntity, Reference, plain_value
 from embed_data_graph.core.source import SourceRef, optional_source
 
 
@@ -341,6 +341,47 @@ class CancerRegistryEntry(MutableEntity):
             "metadata": self.metadata,
             "source": self.source,
         }
+
+
+@dataclass
+class UnkeyedRegistryEntry:
+    """A patient's cancer-registry record that has no registry ID.
+
+    Registry rows without a registry ID are real registry records, but no
+    exam can be assigned to them and no key identifies them across loads. The
+    owning ``Patient`` stores them as a snapshot in
+    ``Patient.unkeyed_registry_entries``; they are values, not graph entities,
+    and are never inferred to be the same record as a keyed entry.
+
+    Parameters
+    ----------
+    payload : mapping, optional
+        Explicitly mapped registry fields, copied into a dict. Default empty.
+    source : SourceRef or None, optional
+        Row the record was read from. Default None.
+
+    Examples
+    --------
+    >>> entry = UnkeyedRegistryEntry({"diagnosis_date": "2020-03-01"})
+    >>> entry.to_dict()
+    {'payload': {'diagnosis_date': '2020-03-01'}, 'source': None}
+    """
+
+    payload: Dict[str, Any] = field(default_factory=dict)
+    """Explicitly mapped registry fields."""
+    source: Optional[SourceRef] = None
+    """Row the record was read from."""
+
+    def __post_init__(self) -> None:
+        if self.payload is not None and not isinstance(self.payload, Mapping):
+            raise TypeError("payload must be a mapping")
+        self.payload = dict(self.payload or {})
+        self.source = optional_source(self.source)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the record as JSON-compatible values."""
+
+        return {"payload": plain_value(self.payload), "source": plain_value(self.source)}
 
 
 def _required_text(value: Any, name: str) -> str:
