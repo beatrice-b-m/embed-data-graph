@@ -61,6 +61,8 @@ unresolved records. Unresolved records stay reachable from the patient their row
 names, keep what the row reported, and never take a missing procedure side from
 the finding side.
 Unkeyed histories are patient-scoped reported facts, without inferred event identity.
+A reported fact is known as of its context exam's date; one without a resolvable
+context exam date has no as-of date and is never treated as known earlier.
 
 An image's mutable `image_id` is separate from its source SOP UID and path aliases.
 Without an explicit SOP UID, the adapter takes source identity from the

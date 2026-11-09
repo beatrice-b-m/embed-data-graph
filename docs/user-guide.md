@@ -228,7 +228,11 @@ patient = load_embed(magview=rows).graph.patient("P-9")
 assert patient.sex is None
 assert patient.attribute_as_of("sex", date(2021, 1, 1)) == "F"
 assert [item.value for item in patient.attribute_history("sex")] == ["F", "U"]
+assert patient.attribute_resolution("sex", date(2019, 1, 1)).status.value == "not_reported"
 ```
+
+`attribute_resolution` returns the same value with its status: reported, not
+reported, or a conflict between reports on the latest qualifying date.
 
 ## Refresh and merge
 
@@ -477,6 +481,25 @@ contraceptive". Identified history rows refresh
 their existing object in place. Without an event ID, refresh replaces that
 history kind as a patient snapshot; merge requires explicit record IDs and
 preserves existing unkeyed facts while reporting the limitation.
+
+History is captured at the intake of its context exam, so select it as of a
+date with `history_as_of`:
+
+```python
+from datetime import date
+
+from embed_data_graph import load_embed
+
+
+graph = load_embed(
+    exams=[{"acc_anon": "A-20", "empi_anon": "P-20", "studydate_anon": "2020-06-01"}],
+    procedure_history=[{"empi_anon": "P-20", "acc_anon": "A-20", "type": "B", "pcode": "1"}],
+).graph
+patient = graph.patient("P-20")
+assert patient is not None
+assert patient.history_as_of(date(2020, 5, 31)) == ()
+assert len(patient.history_as_of(date(2020, 6, 1), kind="procedure")) == 1
+```
 
 ## Images and ROI collections
 

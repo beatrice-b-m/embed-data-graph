@@ -1,4 +1,5 @@
 """Static consumer journey: checked by mypy, not executed by pytest."""
+from datetime import date
 from typing import Optional, Tuple
 from typing_extensions import assert_type
 
@@ -9,6 +10,8 @@ from embed_data_graph import (
     UnkeyedRegistryEntry, UnresolvedClinicalRecord, load_embed,
 )
 from embed_data_graph.core.selection import Selection
+from embed_data_graph.clinical.attributes import AttributeResolution
+from embed_data_graph.clinical.histories import PatientHistoryObservation
 
 
 class ResearchPatient(Patient):
@@ -53,6 +56,8 @@ research_roi = ResearchROI.from_embed_coordinates((0, 0, 9, 9), image_id="I", ro
 assert_type(research_roi, ResearchROI)
 assert_type(research_roi.resize(scale_y=2, scale_x=2), ResearchROI)
 assert_type(research_roi.update(confidence=0.5), ResearchROI)
+assert_type(Patient("P").attribute_resolution("sex", date(2020, 1, 1)), AttributeResolution)
+assert_type(Patient("P").history_as_of(date(2020, 1, 1), kind="procedure"), Tuple[PatientHistoryObservation, ...])
 assert_type(MammogramImage("I").dbt_form, Optional[DbtForm])
 assert_type(MammogramImage("I").view_modification, ViewModification)
 assert_type(MammogramImage("I").recovered_view_position, ViewPosition)
