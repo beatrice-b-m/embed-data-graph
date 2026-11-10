@@ -21,6 +21,8 @@ class UnkeyedFinding:
         Assessment and recommendation as reported.
     descriptors : dict
         Semantic descriptor names to codes; owned copy supplied by the loader.
+        The tabular ``unresolved`` view projects them as the same typed
+        descriptor columns as ``findings``.
     source : SourceRef or None
         Optional physical evidence, never clinical identity.
     laterality : Laterality

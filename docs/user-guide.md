@@ -763,9 +763,9 @@ from embed_data_graph import load_embed
 
 graph = load_embed(
     findings=[{"empi_anon": "P", "acc_anon": "A", "numfind": None,
-               "side": "R", "asses": "A"}],
+               "side": "R", "asses": "A", "massshape": "R"}],
     pathology=[{"empi_anon": "P", "acc_anon": "A", "numfind": 1,
-                "bside": None, "path_severity": 0}],
+                "bside": None, "path_severity": 6}],
     registry=[{"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2021-05-01",
                "HISTOLOGY_ICDO3": 8520.0, "BEHAVIOR_ICDO3": 2.0}],
 ).graph
@@ -773,8 +773,10 @@ rows = graph.records("unresolved")
 finding = next(row for row in rows if row["kind"] == "finding")
 assert finding["reported_laterality"] == "R"
 assert finding["laterality"] == "UNKNOWN" and finding["finding_number"] is None
+assert finding["mass_shape"] == "R"  # Same typed descriptors as `findings`.
 pathology = next(row for row in rows if row["kind"] == "pathology")
 assert (pathology["accession_number"], pathology["finding_number"]) == ("A", "1")
+assert pathology["severity"] is None and pathology["raw_severity"] == 6
 registry = next(row for row in rows if row["kind"] == "registry")
 assert registry["icdo3"] == "8520/2" and registry["diagnosis_date"].year == 2021
 ```

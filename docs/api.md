@@ -368,8 +368,9 @@ column lists, datetime rules, supplementary tables and key encoding.
 
 `UnresolvedClinicalRecord.accession_number` and `.finding_number` preserve
 reported parent identifiers. `UnkeyedFinding.reported_laterality` is the source
-side, distinct from its unresolved `laterality`. These facts, plus all typed
-registry facts for unkeyed registry entries, are columns of `unresolved`.
+side, distinct from its unresolved `laterality`. These facts, the typed
+descriptors of unkeyed findings, `raw_severity` of unresolved pathology and all
+typed registry facts for unkeyed registry entries are columns of `unresolved`.
 
 Invalid-accession clinical evidence is normalized into the existing
 `Patient.unresolved_clinical_records` and tabular `unresolved` interfaces,

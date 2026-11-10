@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Typed facts on unresolved records (#28, #30)
+
+- Project unkeyed findings' mammography descriptors in `unresolved` as the same
+  typed columns as `findings` (`mass` through `implant_finding`, with `_meaning`
+  companions and the same code normalization); null on other kinds.
+- Add `raw_severity` to `unresolved`, so an out-of-scale pathology code on an
+  incomplete or invalid-accession record is distinguishable from a missing one.
+- The new columns are appended after the existing `unresolved` columns.
+
 ### Incomplete source normalization fixes (#26)
 
 - Retain typed procedure/pathology evidence on invalid-accession rows alongside

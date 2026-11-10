@@ -65,6 +65,11 @@ Unkeyed findings retain UNKNOWN `laterality` and null `finding_number`; their
 `reported_laterality` preserves the source side independently of identity. A
 supplied null side is BILATERAL (`B`), consistent with keyed EMBED findings;
 an absent/unbound column or unrecognized code stays UNKNOWN.
+Unkeyed findings also carry the same typed descriptor columns as `findings`
+(`mass` through `implant_finding`, each with a `_meaning` companion), with the
+same code normalization. Unresolved pathology rows carry `raw_severity`, the
+severity as supplied, beside the normalized `severity`, so an out-of-scale code
+is distinguishable from a missing one. These columns are null on other kinds.
 Unkeyed registry entries expose every typed registry fact in `unresolved`,
 including parsed `diagnosis_date`, normalized histology/behavior and `icdo3`,
 source and normalized laterality, stages, receptors and vital status. Their
@@ -503,6 +508,31 @@ Key: `record_key`
 | `progesterone_receptor_meaning` | string |
 | `her2` | string |
 | `her2_meaning` | string |
+| `raw_severity` | scalar |
+| `mass` | string |
+| `mass_meaning` | string |
+| `asymmetry` | string |
+| `asymmetry_meaning` | string |
+| `architectural_distortion` | string |
+| `architectural_distortion_meaning` | string |
+| `calcification` | string |
+| `calcification_meaning` | string |
+| `mass_shape` | string |
+| `mass_shape_meaning` | string |
+| `mass_margin` | string |
+| `mass_margin_meaning` | string |
+| `mass_density` | string |
+| `mass_density_meaning` | string |
+| `calcification_morphology` | string |
+| `calcification_morphology_meaning` | string |
+| `calcification_distribution` | string |
+| `calcification_distribution_meaning` | string |
+| `calcification_number` | string |
+| `calcification_number_meaning` | string |
+| `other_finding` | string |
+| `other_finding_meaning` | string |
+| `implant_finding` | string |
+| `implant_finding_meaning` | string |
 
 ### unresolved_values
 
