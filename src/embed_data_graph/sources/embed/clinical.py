@@ -199,7 +199,7 @@ def _apply_procedure(state: _Snapshot, key: Hashable, group: List[_ProcedureRow]
     entity = graph.get("procedure", key)
     if entity is None:
         entity = graph.register(group[0].procedure)
-    values, conflicts = _combine([(item.row, item.payload_columns) for item in group], state.issues, key)
+    values, conflicts = _combine([(item.row, item.payload_columns) for item in group], state.issues, key, "procedure")
     updates = _for_mode(values, conflicts, state.merge)
     if state.merge:
         reconcile_merge(_current(entity, updates), updates, grain="procedure", key=key, issues=state.issues)
@@ -211,9 +211,10 @@ def _apply_procedure(state: _Snapshot, key: Hashable, group: List[_ProcedureRow]
 def _apply_pathology(state: _Snapshot, key: Hashable, group: List[_PathologyRow]) -> None:
     graph = state.graph
     slots = _descriptor_slots(group)
-    if not group[0].explicit and any(len(values) > 1 for values in slots.values()):
-        # Rows of one procedure disagree on a descriptor slot; without a record
-        # ID there is no way to tell which report is which.
+    if not group[0].explicit and (any(len(values) > 1 for values in slots.values()) or _severity_differs(group)):
+        # Rows of one procedure disagree on a descriptor slot or the severity
+        # result; without a record ID there is no way to tell which report is
+        # which, so each row is kept with its own result instead of nulling it.
         existing = graph.get("pathology", key)
         if existing is not None and not state.merge:
             graph.pop(existing)
@@ -227,14 +228,14 @@ def _apply_pathology(state: _Snapshot, key: Hashable, group: List[_PathologyRow]
                     "conflicting_clinical_values",
                     "Conflicting descriptor slot becomes unknown",
                     IssueSeverity.WARNING,
-                    context={"identity": key, "slot": slot, "values": candidates},
+                    context={"identity": key, "grain": "pathology", "slot": slot, "values": candidates},
                 )
             )
     scalar_columns = [
         (item.row, {name: column for name, column in item.columns.items() if name in _PATHOLOGY_FIELDS})
         for item in group
     ]
-    values, conflicts = _combine(scalar_columns, state.issues, key)
+    values, conflicts = _combine(scalar_columns, state.issues, key, "pathology")
     normalized, _ = normalize_pathology(values, {name: name for name in values})
     updates = {name: normalized.get(name) for name in values}
     if "severity" in values:
@@ -335,7 +336,7 @@ def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns
     payload_columns = {name: column for name, column in columns.items() if name not in {"patient_id", "registry_id"}}
     _apply_unkeyed_registry(state, unkeyed, payload_columns)
     for key, group in grouped.items():
-        payload, conflicts = _combine([(row, payload_columns) for row in group], state.issues, key)
+        payload, conflicts = _combine([(row, payload_columns) for row in group], state.issues, key, "registry")
         entity = state.graph.registry_entry(*key)
         if entity is None:
             state.graph.register(CancerRegistryEntry(key[0], key[1], payload=payload))
@@ -541,6 +542,16 @@ def _link(graph: DatasetGraph, kind: str, key: Hashable, attachment: Attachment)
         graph.update(entity, **{name: {*current, attachment[1]}})
 
 
+def _severity_differs(group: List[_PathologyRow]) -> bool:
+    supplied: List[Any] = []
+    for item in group:
+        column = item.columns.get("severity")
+        value = cell(item.row, column) if column is not None and column in item.row else None
+        if value is not None and value not in supplied:
+            supplied.append(value)
+    return len(supplied) > 1
+
+
 def _descriptor_slots(group: List[_PathologyRow]) -> Dict[int, List[Code]]:
     slots: Dict[int, List[Code]] = defaultdict(list)
     for item in group:
@@ -554,11 +565,14 @@ def _combine(
     rows: Iterable[Tuple[Mapping[str, Any], ColumnMap]],
     issues: List[Issue],
     key: Any,
+    grain: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Set[str]]:
     """Combine supplied columns across rows; conflicting values become None.
 
     Returns the combined values and the names of fields that conflicted. A
-    column absent from every row is not part of the result.
+    column absent from every row is not part of the result. ``grain`` names
+    the entity kind ``key`` identifies, so a conflict issue joins to the
+    record whose value it nulled; None for rows with no entity identity.
     """
 
     grouped: Dict[str, List[Any]] = defaultdict(list)
@@ -581,7 +595,7 @@ def _combine(
                     "conflicting_clinical_values",
                     "Conflicting populated values become unknown",
                     IssueSeverity.WARNING,
-                    context={"identity": key, "field": name, "values": values},
+                    context={"identity": key, **({"grain": grain} if grain else {}), "field": name, "values": values},
                 )
             )
     return result, conflicts

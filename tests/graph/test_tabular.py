@@ -210,6 +210,56 @@ def test_unkeyed_assessment_exposes_reported_side_without_resolving_identity(sid
     assert graph.table("unresolved").reported_laterality.iloc[0] == expected
 
 
+def test_unkeyed_finding_projects_same_typed_descriptors_as_keyed_finding():
+    row = {"empi_anon": "P", "acc_anon": "A", "side": None, "asses": "A", "massshape": " r ",
+           "massmargin": "D", "calcdistri": "G", "calcfind": "PL,AM"}
+    graph = load_embed(magview=[{**row, "numfind": None}, {**row, "acc_anon": "K", "numfind": 1}]).graph
+    unkeyed, = graph.records("unresolved")
+    keyed, = graph.records("findings")
+    names = ("mass", "asymmetry", "architectural_distortion", "calcification", "mass_shape", "mass_margin",
+             "mass_density", "calcification_morphology", "calcification_distribution", "calcification_number",
+             "other_finding", "implant_finding")
+    descriptors = [*names, *(name + "_meaning" for name in names)]
+    unresolved_schema = graph.table_schema("unresolved").columns
+    assert all(unresolved_schema[field] == graph.table_schema("findings").columns[field] for field in descriptors)
+    for field in descriptors:
+        assert unkeyed[field] == keyed[field], field
+    assert unkeyed["mass_shape"] == "R" and unkeyed["mass_shape_meaning"] is not None
+    assert unkeyed["kind"] == "finding" and unkeyed["reported_laterality"] == "B"
+    frame = graph.table("unresolved")
+    assert frame.mass_shape.iloc[0] == "R"
+    other = load_embed(pathology=[{"empi_anon": "P", "acc_anon": "A", "type": "B", "path_severity": 0}]).graph
+    record, = other.records("unresolved")
+    assert all(record[field] is None for field in descriptors)
+
+
+@pytest.mark.parametrize("acc, numfind", [("A", 1), (999, None)])
+def test_unresolved_pathology_exposes_raw_severity(acc, numfind):
+    graph = load_embed(pathology=[{"empi_anon": "P", "acc_anon": acc, "numfind": numfind, "type": "B",
+                                   "procdate_anon": "2021-05-01", "path_severity": 6}]).graph
+    # Invalid accessions also keep a raw wrapper row; the typed record carries the fact.
+    records = [r for r in graph.records("unresolved") if r["kind"] == "pathology"]
+    assert all(r["severity"] is None for r in records)
+    assert [r["raw_severity"] for r in records if r["raw_severity"] is not None] == [6]
+    assert graph.table_schema("unresolved").columns["raw_severity"] == "scalar"
+    assert 6 in graph.table("unresolved").raw_severity.tolist()
+
+
+def test_clinical_conflict_issues_join_the_record_whose_value_they_nulled():
+    columns = {"pathology": {"record_id": "report_id"}}
+    row = {"empi_anon": "P", "acc_anon": "A", "numfind": 1, "report_id": "R1", "path_severity": 4}
+    graph = load_embed(pathology=[row, {**row, "path_severity": 5}], columns=columns,
+                       registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "R", "T_Stage": stage}
+                                 for stage in ("T1", "T2")]).graph
+    issues = [r for r in graph.records("issues") if r["code"] == "conflicting_clinical_values"]
+    pathology, = graph.records("pathology")
+    registry, = graph.records("registry")
+    assert pathology["severity"] is None and pathology["raw_severity"] is None
+    joined = {(r["kind"], r["entity_key"], r["field"]) for r in issues}
+    assert ("pathology", pathology["entity_key"], "severity") in joined
+    assert ("registry", registry["entity_key"], "t_stage") in joined
+
+
 def test_unkeyed_registry_projects_same_typed_facts_as_keyed_registry():
     row = {"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2021-05-01", "LATERALITY": 9,
            "HISTOLOGY_ICDO3": 8520.0, "BEHAVIOR_ICDO3": 2.0, "PRIMARY_SITE": "C504",

@@ -161,8 +161,10 @@ and is not a diagnosis or event date. Descriptor slots belong to the bundle;
 duplicate values and order are preserved. Pathology without a complete
 procedure or record ID is kept as an unresolved record with its payload and the
 attachment the adapter could establish, never keyed by a row position. When rows
-of one procedure disagree on a descriptor slot, the bundle is unresolved because
-only a record ID could tell the reports apart. Within an addressed attachment's
+of one procedure disagree on a descriptor slot or on the supplied severity, the
+bundle is unresolved because only a record ID could tell the reports apart; each
+row keeps its own severity. With a record ID, a conflicting value becomes
+unknown and its `conflicting_clinical_values` issue names the record. Within an addressed attachment's
 refresh, unresolved snapshots replace earlier ones; no replay ledger accumulates.
 A pathology row also addresses its own exam or finding, so a corrected row that
 now resolves clears what an earlier incomplete row left there.
@@ -368,8 +370,9 @@ column lists, datetime rules, supplementary tables and key encoding.
 
 `UnresolvedClinicalRecord.accession_number` and `.finding_number` preserve
 reported parent identifiers. `UnkeyedFinding.reported_laterality` is the source
-side, distinct from its unresolved `laterality`. These facts, plus all typed
-registry facts for unkeyed registry entries, are columns of `unresolved`.
+side, distinct from its unresolved `laterality`. These facts, the typed
+descriptors of unkeyed findings, `raw_severity` of unresolved pathology and all
+typed registry facts for unkeyed registry entries are columns of `unresolved`.
 
 Invalid-accession clinical evidence is normalized into the existing
 `Patient.unresolved_clinical_records` and tabular `unresolved` interfaces,

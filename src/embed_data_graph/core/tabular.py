@@ -54,6 +54,7 @@ _CODES = {
     "pathology": ("procedure_type", *(f"descriptor_{i}" for i in range(1, 11))),
     "registry": ("estrogen_receptor", "progesterone_receptor", "her2"),
 }
+_FINDING_DESCRIPTORS = tuple(name for name in _CODES["findings"] if name not in {"assessment", "recommendation"})
 _FIELDS = {
     "patients": "patient_id sex race ethnicity birth_year cohort_number",
     "exams": "accession_number patient_id exam_date description patient_age location_id accession_type total_left_findings total_right_findings contested owner_explicit imaged_laterality",
@@ -113,6 +114,10 @@ def table_schema(name: str) -> TableSchema:
         columns.update(finding_number="string", reported_laterality="string")
         columns.update({field: _type(field) for field in _FIELDS["registry"].split()})
         for field in _CODES["registry"]:
+            columns.update({field: "string", field + "_meaning": "string"})
+        # Later additions are appended so earlier column positions stay stable.
+        columns.update(raw_severity="scalar")
+        for field in _FINDING_DESCRIPTORS:
             columns.update({field: "string", field + "_meaning": "string"})
         key = ("record_key",)
     elif name == "unresolved_values":
@@ -278,7 +283,9 @@ def _issue_row(issue: Issue, kind: Optional[str] = None, key: Optional[str] = No
         if context.get("patient_id") is not None:
             kind, key = "patient", _encode(context["patient_id"])
     elif key is None:
-        if "identity" in context:
+        if "identity" in context and context.get("grain") in _GRAINS.values():
+            kind, key = context["grain"], _encode(context["identity"])
+        elif "identity" in context:
             for candidate in _GRAINS.values():
                 if candidate in issue.code.split("_"):
                     kind, key = candidate, _encode(context["identity"])
@@ -301,6 +308,7 @@ def _issue_row(issue: Issue, kind: Optional[str] = None, key: Optional[str] = No
 def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) -> Dict[str, List[Dict[str, Scalar]]]:
     """Build a fresh snapshot with no mutation or pandas import."""
 
+    from embed_data_graph.clinical.incomplete import UnkeyedFinding
     from embed_data_graph.clinical.pathology import UnkeyedRegistryEntry, UnresolvedClinicalRecord
 
     names = (*_GRAINS, *_LINKS, "values", "unresolved", "unresolved_values", "issues")
@@ -401,6 +409,10 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
             row["diagnosis_date"] = record.payload.get("diagnosis_date")
             for field in _CODES["registry"]:
                 _code_fields(row, field, getattr(record, field))
+        if isinstance(record, UnkeyedFinding):
+            # Same typed descriptor columns and code normalization as findings.
+            for field in _FINDING_DESCRIPTORS:
+                _code_fields(row, field, record.descriptors.get(field))
         interpretation = getattr(record, "interpretation", None)
         for name in ("assessment", "recommendation"):
             _code_fields(row, name, getattr(interpretation, name, None))

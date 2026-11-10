@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Typed facts on unresolved records (#28, #30)
+
+- Project unkeyed findings' mammography descriptors in `unresolved` as the same
+  typed columns as `findings` (`mass` through `implant_finding`, with `_meaning`
+  companions and the same code normalization); null on other kinds.
+- Add `raw_severity` to `unresolved`, so an out-of-scale pathology code on an
+  incomplete or invalid-accession record is distinguishable from a missing one.
+- The new columns are appended after the existing `unresolved` columns.
+
+### Pathology severity conflicts (#29)
+
+- `conflicting_clinical_values` issues now carry the `kind` and `entity_key` of
+  the procedure, pathology or registry record whose value they nulled, so they
+  join to that record in `issues`.
+- Procedure-keyed pathology rows (no record ID) that disagree on the supplied
+  severity are now unresolved as `ambiguous_pathology_identity`, like a
+  descriptor-slot disagreement, and each keeps its own `severity` and
+  `raw_severity`. Previously one `Pathology` kept a null severity that read the
+  same as no code. Consumers counting `pathology` rows should also read these
+  unresolved rows. Explicit record-ID conflicts still become unknown.
+
 ### Incomplete source normalization fixes (#26)
 
 - Retain typed procedure/pathology evidence on invalid-accession rows alongside

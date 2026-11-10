@@ -563,6 +563,7 @@ class UnresolvedClinicalRecord:
         Pathology severity group for pathology rows. Default None.
     raw_severity : Any, optional
         Severity as supplied, including out-of-scale codes. Default None.
+        Projected as the ``unresolved`` table's ``raw_severity`` column.
     report_documented_date : str or None, optional
         Provisional pathology report date. Default None.
     descriptors : tuple of PathologyObservation, optional
