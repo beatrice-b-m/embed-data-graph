@@ -11,6 +11,12 @@
   incomplete or invalid-accession record is distinguishable from a missing one.
 - The new columns are appended after the existing `unresolved` columns.
 
+### Pathology severity conflicts (#29)
+
+- `conflicting_clinical_values` issues now carry the `kind` and `entity_key` of
+  the procedure, pathology or registry record whose value they nulled, so they
+  join to that record in `issues`.
+
 ### Incomplete source normalization fixes (#26)
 
 - Retain typed procedure/pathology evidence on invalid-accession rows alongside

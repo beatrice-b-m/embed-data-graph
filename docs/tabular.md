@@ -112,7 +112,9 @@ joined with commas. Meanings retain the vocabulary's supplied text/order.
 Enums become their values, including numeric pathology severity.
 
 `issues` combines deduplicated historical `graph.load_issues` and current date
-projection diagnostics. Entity-addressed issues carry `kind` and `entity_key`;
+projection diagnostics. Entity-addressed issues carry `kind` and `entity_key`,
+including `conflicting_clinical_values` on the procedure, pathology or registry
+record whose value the conflict nulled;
 unresolved-date issues use the snapshot record_key. Unaddressed batch issues
 have null keys. `context` is canonical JSON text. Corrections do not erase load
 history; current projection diagnostics are recomputed without mutating the

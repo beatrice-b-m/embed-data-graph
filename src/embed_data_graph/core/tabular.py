@@ -283,7 +283,9 @@ def _issue_row(issue: Issue, kind: Optional[str] = None, key: Optional[str] = No
         if context.get("patient_id") is not None:
             kind, key = "patient", _encode(context["patient_id"])
     elif key is None:
-        if "identity" in context:
+        if "identity" in context and context.get("grain") in _GRAINS.values():
+            kind, key = context["grain"], _encode(context["identity"])
+        elif "identity" in context:
             for candidate in _GRAINS.values():
                 if candidate in issue.code.split("_"):
                     kind, key = candidate, _encode(context["identity"])

@@ -245,6 +245,21 @@ def test_unresolved_pathology_exposes_raw_severity(acc, numfind):
     assert 6 in graph.table("unresolved").raw_severity.tolist()
 
 
+def test_clinical_conflict_issues_join_the_record_whose_value_they_nulled():
+    columns = {"pathology": {"record_id": "report_id"}}
+    row = {"empi_anon": "P", "acc_anon": "A", "numfind": 1, "report_id": "R1", "path_severity": 4}
+    graph = load_embed(pathology=[row, {**row, "path_severity": 5}], columns=columns,
+                       registry=[{"empi_anon": "P", "cancer_outcome_registry_id": "R", "T_Stage": stage}
+                                 for stage in ("T1", "T2")]).graph
+    issues = [r for r in graph.records("issues") if r["code"] == "conflicting_clinical_values"]
+    pathology, = graph.records("pathology")
+    registry, = graph.records("registry")
+    assert pathology["severity"] is None and pathology["raw_severity"] is None
+    joined = {(r["kind"], r["entity_key"], r["field"]) for r in issues}
+    assert ("pathology", pathology["entity_key"], "severity") in joined
+    assert ("registry", registry["entity_key"], "t_stage") in joined
+
+
 def test_unkeyed_registry_projects_same_typed_facts_as_keyed_registry():
     row = {"empi_anon": "P", "DATE_OF_DIAGNOSIS_ANON": "2021-05-01", "LATERALITY": 9,
            "HISTOLOGY_ICDO3": 8520.0, "BEHAVIOR_ICDO3": 2.0, "PRIMARY_SITE": "C504",

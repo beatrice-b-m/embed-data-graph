@@ -199,7 +199,7 @@ def _apply_procedure(state: _Snapshot, key: Hashable, group: List[_ProcedureRow]
     entity = graph.get("procedure", key)
     if entity is None:
         entity = graph.register(group[0].procedure)
-    values, conflicts = _combine([(item.row, item.payload_columns) for item in group], state.issues, key)
+    values, conflicts = _combine([(item.row, item.payload_columns) for item in group], state.issues, key, "procedure")
     updates = _for_mode(values, conflicts, state.merge)
     if state.merge:
         reconcile_merge(_current(entity, updates), updates, grain="procedure", key=key, issues=state.issues)
@@ -227,14 +227,14 @@ def _apply_pathology(state: _Snapshot, key: Hashable, group: List[_PathologyRow]
                     "conflicting_clinical_values",
                     "Conflicting descriptor slot becomes unknown",
                     IssueSeverity.WARNING,
-                    context={"identity": key, "slot": slot, "values": candidates},
+                    context={"identity": key, "grain": "pathology", "slot": slot, "values": candidates},
                 )
             )
     scalar_columns = [
         (item.row, {name: column for name, column in item.columns.items() if name in _PATHOLOGY_FIELDS})
         for item in group
     ]
-    values, conflicts = _combine(scalar_columns, state.issues, key)
+    values, conflicts = _combine(scalar_columns, state.issues, key, "pathology")
     normalized, _ = normalize_pathology(values, {name: name for name in values})
     updates = {name: normalized.get(name) for name in values}
     if "severity" in values:
@@ -335,7 +335,7 @@ def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns
     payload_columns = {name: column for name, column in columns.items() if name not in {"patient_id", "registry_id"}}
     _apply_unkeyed_registry(state, unkeyed, payload_columns)
     for key, group in grouped.items():
-        payload, conflicts = _combine([(row, payload_columns) for row in group], state.issues, key)
+        payload, conflicts = _combine([(row, payload_columns) for row in group], state.issues, key, "registry")
         entity = state.graph.registry_entry(*key)
         if entity is None:
             state.graph.register(CancerRegistryEntry(key[0], key[1], payload=payload))
@@ -554,11 +554,14 @@ def _combine(
     rows: Iterable[Tuple[Mapping[str, Any], ColumnMap]],
     issues: List[Issue],
     key: Any,
+    grain: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Set[str]]:
     """Combine supplied columns across rows; conflicting values become None.
 
     Returns the combined values and the names of fields that conflicted. A
-    column absent from every row is not part of the result.
+    column absent from every row is not part of the result. ``grain`` names
+    the entity kind ``key`` identifies, so a conflict issue joins to the
+    record whose value it nulled; None for rows with no entity identity.
     """
 
     grouped: Dict[str, List[Any]] = defaultdict(list)
@@ -581,7 +584,7 @@ def _combine(
                     "conflicting_clinical_values",
                     "Conflicting populated values become unknown",
                     IssueSeverity.WARNING,
-                    context={"identity": key, "field": name, "values": values},
+                    context={"identity": key, **({"grain": grain} if grain else {}), "field": name, "values": values},
                 )
             )
     return result, conflicts
