@@ -161,8 +161,10 @@ and is not a diagnosis or event date. Descriptor slots belong to the bundle;
 duplicate values and order are preserved. Pathology without a complete
 procedure or record ID is kept as an unresolved record with its payload and the
 attachment the adapter could establish, never keyed by a row position. When rows
-of one procedure disagree on a descriptor slot, the bundle is unresolved because
-only a record ID could tell the reports apart. Within an addressed attachment's
+of one procedure disagree on a descriptor slot or on the supplied severity, the
+bundle is unresolved because only a record ID could tell the reports apart; each
+row keeps its own severity. With a record ID, a conflicting value becomes
+unknown and its `conflicting_clinical_values` issue names the record. Within an addressed attachment's
 refresh, unresolved snapshots replace earlier ones; no replay ledger accumulates.
 A pathology row also addresses its own exam or finding, so a corrected row that
 now resolves clears what an earlier incomplete row left there.

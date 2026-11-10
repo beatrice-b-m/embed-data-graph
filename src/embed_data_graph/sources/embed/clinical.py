@@ -211,9 +211,10 @@ def _apply_procedure(state: _Snapshot, key: Hashable, group: List[_ProcedureRow]
 def _apply_pathology(state: _Snapshot, key: Hashable, group: List[_PathologyRow]) -> None:
     graph = state.graph
     slots = _descriptor_slots(group)
-    if not group[0].explicit and any(len(values) > 1 for values in slots.values()):
-        # Rows of one procedure disagree on a descriptor slot; without a record
-        # ID there is no way to tell which report is which.
+    if not group[0].explicit and (any(len(values) > 1 for values in slots.values()) or _severity_differs(group)):
+        # Rows of one procedure disagree on a descriptor slot or the severity
+        # result; without a record ID there is no way to tell which report is
+        # which, so each row is kept with its own result instead of nulling it.
         existing = graph.get("pathology", key)
         if existing is not None and not state.merge:
             graph.pop(existing)
@@ -539,6 +540,16 @@ def _link(graph: DatasetGraph, kind: str, key: Hashable, attachment: Attachment)
     current = getattr(entity, name)
     if attachment[1] not in current:
         graph.update(entity, **{name: {*current, attachment[1]}})
+
+
+def _severity_differs(group: List[_PathologyRow]) -> bool:
+    supplied: List[Any] = []
+    for item in group:
+        column = item.columns.get("severity")
+        value = cell(item.row, column) if column is not None and column in item.row else None
+        if value is not None and value not in supplied:
+            supplied.append(value)
+    return len(supplied) > 1
 
 
 def _descriptor_slots(group: List[_PathologyRow]) -> Dict[int, List[Code]]:

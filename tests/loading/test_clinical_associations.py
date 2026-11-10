@@ -414,3 +414,17 @@ def test_conflicting_registry_rows_make_the_field_unknown():
     assert entry.laterality.value == "UNKNOWN" and entry.source_laterality is None
     assert entry.histology == "8500"
     assert "conflicting_clinical_values" in {issue.code for issue in issues}
+
+
+def test_procedure_keyed_severity_conflict_keeps_each_report_unresolved():
+    graph = DatasetGraph()
+    invasive, benign = clinical_row(path_severity=4), clinical_row(path_severity=5)
+    for rows in ([invasive, benign], [benign, invasive]):
+        issues = load(graph, pathology=rows)
+        assert "ambiguous_pathology_identity" in {i.code for i in issues}
+        assert not graph.pathology
+        records = [e["record"] for v in graph.unresolved_records.values() for e in v]
+        assert sorted(r.raw_severity for r in records if r.kind == "pathology") == [4, 5]
+    load(graph, pathology=[invasive, clinical_row(path_severity=4.0)])  # Same code, no conflict.
+    assert graph.pathology[0].raw_severity == 4
+    assert not graph.unresolved_records

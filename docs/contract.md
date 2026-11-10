@@ -58,8 +58,8 @@ Procedure identity requires patient, performed date, procedure type, and lateral
 Pathology uses an explicit patient-scoped record ID or, for MagView rows, the
 identity of the procedure it belongs to. The provisional pathology report date is
 an attribute, never identity. Pathology without a complete procedure or record ID,
-and procedure pathology whose descriptor slots disagree across rows, remain
-unresolved records. Unresolved records stay reachable from the patient their row
+and procedure pathology whose descriptor slots or supplied severities disagree
+across rows, remain unresolved records, so no report's result is silently nulled. Unresolved records stay reachable from the patient their row
 names, keep what the row reported, and never take a missing procedure side from
 the finding side.
 Unkeyed histories are patient-scoped reported facts, without inferred event identity.

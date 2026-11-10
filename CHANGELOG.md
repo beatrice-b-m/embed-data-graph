@@ -16,6 +16,12 @@
 - `conflicting_clinical_values` issues now carry the `kind` and `entity_key` of
   the procedure, pathology or registry record whose value they nulled, so they
   join to that record in `issues`.
+- Procedure-keyed pathology rows (no record ID) that disagree on the supplied
+  severity are now unresolved as `ambiguous_pathology_identity`, like a
+  descriptor-slot disagreement, and each keeps its own `severity` and
+  `raw_severity`. Previously one `Pathology` kept a null severity that read the
+  same as no code. Consumers counting `pathology` rows should also read these
+  unresolved rows. Explicit record-ID conflicts still become unknown.
 
 ### Incomplete source normalization fixes (#26)
 
