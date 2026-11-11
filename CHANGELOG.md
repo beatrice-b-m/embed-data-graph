@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Separate tumors within registry groups (#35)
+
+- Bind optional registry `record_id` to `TUMOR_RECORD_NUMBER` and use a third key
+  component when present. Missing tumor IDs preserve legacy grouping; explicit
+  column overrides support other documented per-tumor identifiers.
+- Resolve patient/registry exam pointers to every tumor, including later arrivals,
+  with one `exam_registry` row per tumor. Three-part references remain exact.
+- Add optional `CancerRegistryEntry.record_id` and exact three-part lookup through
+  `graph.registry_entry`. Append `record_id` to registry and unresolved schemas.
+  Consumers should use the tumor ID for exact lookup or traverse registry entries;
+  the group pointer does not pick one tumor. Mixed rows with/without tumor IDs
+  remain separate rather than assigning missing identities.
+
+
+### Clinical exam context for split findings (#36)
+
+- Keep exam links for procedures and pathology with ambiguous finding numbers,
+  including existing links and pathology reached through a procedure.
+- Address ambiguity diagnostics to each clinical entity and include candidate
+  finding keys and sides. Incomplete records retain exam context and diagnostics
+  join their `unresolved.record_key`; corrected loads clear those snapshots.
+- Keep original finding references unresolved; no side-based attribution is inferred.
+
+
 ### Repeated finding numbers on different sides (#32)
 
 - Separate rows with the same accession/number and different populated valid

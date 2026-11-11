@@ -1,6 +1,6 @@
 """Static consumer journey: checked by mypy, not executed by pytest."""
 from datetime import date
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from typing_extensions import assert_type
 
 from embed_data_graph import (
@@ -94,3 +94,10 @@ assert_type(load_embed(invalid_accessions={"999", "invalid"}), LoadReport)
 assert_type(UnresolvedClinicalRecord("pathology", "incomplete").accession_number, Optional[str])
 assert_type(UnresolvedClinicalRecord("pathology", "incomplete").finding_number, Optional[str])
 assert_type(Exam("E").unkeyed_findings[0].reported_laterality, Laterality)
+
+registry_tumor = CancerRegistryEntry("P", "R", record_id="1")
+assert_type(registry_tumor.record_id, Optional[str])
+assert_type(registry_tumor.identity, Union[Tuple[str, str], Tuple[str, str, str]])
+assert_type(registry_tumor.exams, Tuple[Exam, ...])
+assert_type(graph.registry_entry("P", "R", "1"), Optional[CancerRegistryEntry])
+assert_type(Exam("A", registry_references=[("P", "R", "1")]).registry_entries, Tuple[CancerRegistryEntry, ...])

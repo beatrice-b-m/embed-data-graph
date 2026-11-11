@@ -833,3 +833,46 @@ a bilateral group. Partial reloads retain the other sides and live objects.
 Clinical references to just `(accession, numfind)` remain unresolved and emit
 `ambiguous_finding_reference`, including those in wide MagView rows. Review the
 source before attaching those procedures or pathology bundles to a split finding.
+
+
+When a finding number is split, clinical entities retain their unambiguous exam
+link while the original finding reference remains unresolved. Each
+`ambiguous_finding_reference` diagnostic identifies the clinical `grain` and
+`identity`, plus the original `finding_key` and candidate finding keys/sides.
+In the `issues` projection, `kind` and `entity_key` join to that clinical entity.
+Incomplete records stay exam-scoped snapshots; their projected diagnostic joins
+`unresolved.record_key` rather than inventing an entity identity. A missing
+procedure identity still requires complete mapped procedure columns or a
+patient-scoped pathology record ID; finding ambiguity does not supply one.
+
+
+## Multiple tumors under one registry ID
+
+Registry tumor numbers separate facts that would otherwise conflict. The exam's
+source pointer reaches every tumor in its patient/registry group, whether the
+pointer or the tumors are loaded first.
+
+```python
+from embed_data_graph import load_embed
+
+report = load_embed(
+    magview=[{"empi_anon": "P", "acc_anon": "A", "cancer_outcome_registry_id": "R"}],
+    registry=[
+        {"empi_anon": "P", "cancer_outcome_registry_id": "R", "TUMOR_RECORD_NUMBER": 1,
+         "LATERALITY": 2, "HISTOLOGY_ICDO3": 8500, "BEHAVIOR_ICDO3": 3},
+        {"empi_anon": "P", "cancer_outcome_registry_id": "R", "TUMOR_RECORD_NUMBER": 2,
+         "LATERALITY": 1, "HISTOLOGY_ICDO3": 8500, "BEHAVIOR_ICDO3": 2},
+    ],
+)
+assert len(report.graph.exam("A").registry_entries) == 2
+assert report.graph.registry_entry("P", "R", "1").icdo3 == "8500/3"
+assert report.graph.registry_entry("P", "R", "2").icdo3 == "8500/2"
+assert report.graph.registry_entry("P", "R") is None
+assert len(report.graph.records("exam_registry")) == 2
+```
+
+For a file whose documented tumor key is `SEQUENCE_NUMBER`, explicitly bind
+`columns={"registry": {"record_id": "SEQUENCE_NUMBER"}}`. Neither diagnosis dates
+nor row positions become identities. Without a tumor ID, the legacy grouping and
+conflict diagnostics remain. Mixed keyed and missing-tumor-ID rows remain
+separate so missing identity is not silently imputed.

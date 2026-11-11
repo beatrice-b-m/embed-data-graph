@@ -218,7 +218,7 @@ DEFAULT_COLUMNS: Mapping[str, ColumnMap] = MappingProxyType(
             {
                 "patient_id": "empi_anon",
                 "registry_id": "cancer_outcome_registry_id",
-                "record_id": None,
+                "record_id": "TUMOR_RECORD_NUMBER",
                 "diagnosis_date": "DATE_OF_DIAGNOSIS_ANON",
                 "laterality": "LATERALITY",
                 "histology": "HISTOLOGY_ICDO3",

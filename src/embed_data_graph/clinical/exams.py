@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple, Union
 
 from embed_data_graph.clinical.incomplete import UnkeyedFinding
 from embed_data_graph.core.codes import Code
@@ -101,8 +101,8 @@ class Exam(MutableEntity):
     linked_accessions : iterable of str, optional
         Accessions of exams in the same imaging episode (never prior or
         follow-up exams). Targets may be missing.
-    registry_references : iterable of (str, str), optional
-        Assigned cancer-registry entries as ``(patient_id, registry_id)``.
+    registry_references : iterable of two- or three-part string tuples, optional
+        Registry group pairs reach all tumors; triples include a tumor record ID.
     owner_explicit : bool, optional
         Whether ``patient_id`` was chosen explicitly and survives later source
         claims. Default False.
@@ -176,8 +176,8 @@ class Exam(MutableEntity):
     """Source patient claims; not a choice of owner."""
     linked_accessions: Set[str]
     """Accessions of same-episode exams this exam lists."""
-    registry_references: Set[Tuple[str, str]]
-    """Assigned registry entries as ``(patient_id, registry_id)``."""
+    registry_references: Set[Union[Tuple[str, str], Tuple[str, str, str]]]
+    """Registry group pairs or exact patient/registry/tumor triples."""
     metadata: Dict[str, Any]
     """Consumer metadata."""
     source: Optional[object]
@@ -196,7 +196,7 @@ class Exam(MutableEntity):
         patient_age: Optional[float] = None,
         asserted_patient_ids: Optional[Iterable[str]] = None,
         linked_accessions: Optional[Iterable[str]] = None,
-        registry_references: Optional[Iterable[Tuple[str, str]]] = None,
+        registry_references: Optional[Iterable[Union[Tuple[str, str], Tuple[str, str, str]]]] = None,
         owner_explicit: bool = False,
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[object] = None,
@@ -260,10 +260,12 @@ class Exam(MutableEntity):
         if name in {"asserted_patient_ids", "linked_accessions"}:
             return {_required_text(item, "identifier") for item in value or ()}
         if name == "registry_references":
-            return {
-                (_required_text(patient, "patient_id"), _required_text(registry, "registry_id"))
-                for patient, registry in value or ()
-            }
+            result = set()
+            for key in value or ():
+                if len(key) not in (2, 3):
+                    raise ValueError("Registry references require two or three identifiers")
+                result.add(tuple(_required_text(part, "registry reference") for part in key))
+            return result
         if name == "metadata":
             return dict(value or {})
         if name in {"density", "exam_type", "visit_type", "modality"}:
@@ -333,7 +335,11 @@ class Exam(MutableEntity):
 
     @property
     def registry_entries(self) -> Tuple["CancerRegistryEntry", ...]:
-        """Registered cancer-registry entries assigned to this exam."""
+        """Assigned registry entries, expanding group pairs to all registered tumors.
+
+        Exact triples name one tumor. Entries are live and deduplicated; missing
+        targets contribute no object and resolve when registered later.
+        """
 
         return self._children("registry")
 

@@ -567,3 +567,11 @@ populated when repeated source numbers were split by side; `finding_number` then
 contains the opaque disambiguated graph number. Ordinary rows have null
 `source_finding_number`. Clinical link tables keep ambiguous original targets,
 which remain unresolved, and `issues` records `ambiguous_finding_reference`.
+
+
+Registry tumor identities append `record_id` to the `registry` schema. The
+`unresolved` schema also appends this column for unkeyed registry rows that report
+a tumor number but lack a registry ID. The `exam_registry` link table expands a
+stored patient/registry group pointer into one row per registered tumor; exact
+triples stay exact and a group with no known entries retains its unresolved pair.
+Expansion follows identifiers only and performs no clinical matching.

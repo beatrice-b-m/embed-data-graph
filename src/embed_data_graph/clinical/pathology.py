@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from enum import IntEnum
-from typing import Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Tuple, Union
 
 from embed_data_graph.core.codes import Code
 from embed_data_graph.core.entity import MutableEntity, Reference, plain_value
 from embed_data_graph.core.primitives import Laterality
 from embed_data_graph.core.source import SourceRef, optional_source
+
+if TYPE_CHECKING:
+    from embed_data_graph.clinical.exams import Exam
 
 
 
@@ -418,23 +421,46 @@ class CancerRegistryEntry(RegistryFacts, MutableEntity):
     patient_id : str
         Patient the registry record belongs to; part of the key.
     registry_id : str
-        Registry record ID within that patient; part of the key.
+        Registry group ID within that patient; part of the key.
     payload : mapping, optional
-        Explicitly mapped registry fields, copied into a dict. None bound by
-        default.
+        Registry facts, copied into a new dict. Default None gives an empty dict.
     metadata : mapping, optional
-        Consumer metadata, copied into a dict.
+        Consumer metadata, copied into a new dict. Default None gives an empty dict.
     source : SourceRef or None, optional
-        Row the entry was read from.
+        Row the entry was read from. Default None.
+    record_id : str or None, optional
+        Tumor ID within this patient/registry group. Default None preserves the
+        two-part key; a supplied non-empty ID adds a third key component.
+        IDs are identifiers, not dates or row positions. Included in serialization.
+
+    Raises
+    ------
+    ValueError
+        A required identifier or supplied record_id is empty or not a string.
+
+    Notes
+    -----
+    Exam references to the two-part group reach every registered tumor in it.
+    A three-part reference names exactly one tumor. Payload and metadata are
+    mutable; graph copies independently copy them. No tumor outcome is inferred.
+
+    Examples
+    --------
+    >>> CancerRegistryEntry("P", "R", record_id="1").identity
+    ('P', 'R', '1')
+    >>> CancerRegistryEntry("P", "R").identity
+    ('P', 'R')
     """
 
     kind = "registry"
-    __key_fields__ = ("patient_id", "registry_id")
+    __key_fields__ = ("patient_id", "registry_id", "record_id")
 
     patient_id: str
     """Patient the record belongs to; part of the key."""
     registry_id: str
     """Registry record ID within the patient; part of the key."""
+    record_id: Optional[str]
+    """Tumor ID within the registry group, or None for a legacy two-part key."""
     payload: Dict[str, Any]
     """Explicitly mapped registry fields."""
     metadata: Dict[str, Any]
@@ -447,10 +473,12 @@ class CancerRegistryEntry(RegistryFacts, MutableEntity):
         payload: Optional[Mapping[str, Any]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         source: Optional[SourceRef] = None,
+        record_id: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.patient_id = patient_id
         self.registry_id = registry_id
+        self.record_id = record_id
         self.payload = dict(payload or {})
         self.metadata = dict(metadata or {})
         self.source = source
@@ -458,20 +486,28 @@ class CancerRegistryEntry(RegistryFacts, MutableEntity):
     def _coerce(self, name: str, value: Any) -> Any:
         if name in {"patient_id", "registry_id"}:
             return _required_text(value, name)
+        if name == "record_id":
+            return None if value is None else _required_text(value, name)
         if name in {"payload", "metadata"}:
             return dict(value or {})
         if name == "source":
             return optional_source(value)
         return value
 
-    @property
-    def identity(self) -> Tuple[str, str]:
-        """Return ``(patient_id, registry_id)``."""
+    def _key_with(self, overrides: Mapping[str, Any]) -> Union[Tuple[str, str], Tuple[str, str, str]]:
+        patient = overrides.get("patient_id", self.patient_id)
+        registry = overrides.get("registry_id", self.registry_id)
+        record = overrides.get("record_id", self.record_id)
+        return (patient, registry) if record is None else (patient, registry, record)
 
-        return self.patient_id, self.registry_id
+    @property
+    def identity(self) -> Union[Tuple[str, str], Tuple[str, str, str]]:
+        """Return the patient/registry pair, with record_id appended when supplied."""
+
+        return self._key_with({})
 
     @property
-    def exams(self) -> Tuple[Any, ...]:
+    def exams(self) -> Tuple["Exam", ...]:
         """Registered exams assigned to this entry."""
 
         graph = self.graph
@@ -484,6 +520,7 @@ class CancerRegistryEntry(RegistryFacts, MutableEntity):
         return {
             "patient_id": self.patient_id,
             "registry_id": self.registry_id,
+            "record_id": self.record_id,
             "payload": self.payload,
             "metadata": self.metadata,
             "source": self.source,

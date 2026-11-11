@@ -49,6 +49,8 @@ class Selection(Generic[_SelectedT]):
                 members.setdefault(id(ancestor), ancestor)
         result = DatasetGraph(source_scope=self.graph.source_scope)
         result._entities = {kind: {obj.key: obj for obj in members.values() if obj.kind == kind} for kind in KINDS}
+        for entry in result.registry_entries:
+            result._registry_groups[(entry.patient_id, entry.registry_id)][id(entry)] = entry
         addresses = {(obj.kind, obj.key) for obj in members.values()}
         record_index = self.graph._record_index()
         matched = {entry for address in addresses for entry in record_index.get(address, ())}
@@ -56,7 +58,8 @@ class Selection(Generic[_SelectedT]):
                                      for _, address in sorted(matched, key=lambda entry: entry[0])}
         keys = {(kind, _encode(key)) for kind, key in addresses}
         result.load_issues = tuple(issue for issue in self.graph.load_issues
-                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys)
+                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys
+                                  or issue.context.get("unresolved_address") in result.unresolved_records)
         return result
 
     def records(self, name: str) -> List[Dict[str, Scalar]]:

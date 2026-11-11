@@ -99,6 +99,8 @@ def table_schema(name: str) -> TableSchema:
             columns.update({field: "string", field + "_meaning": "string"})
         if name == "findings":
             columns.update(source_finding_number="string")
+        if name == "registry":
+            columns.update(record_id="string")
         key = ("entity_key",)
     elif name in _LINKS:
         columns = {"source_key": "string", "target_key": "string"}
@@ -121,6 +123,7 @@ def table_schema(name: str) -> TableSchema:
         columns.update(raw_severity="scalar")
         for field in _FINDING_DESCRIPTORS:
             columns.update({field: "string", field + "_meaning": "string"})
+        columns.update(record_id="string")
         key = ("record_key",)
     elif name == "unresolved_values":
         columns = {"record_key": "string", "field": "string", "value": "scalar"}
@@ -253,6 +256,7 @@ def _entity_row(entity: Any, table: str, graph: DatasetGraph) -> Dict[str, Any]:
     if table == "images":
         row["incomplete"] = entity.accession_number is None or graph.exam(entity.accession_number) is None
     if table == "registry":
+        row["record_id"] = entity.record_id
         row["diagnosis_date"] = entity.payload.get("diagnosis_date")
     if table == "findings":
         row["source_finding_number"] = entity.source_finding_number
@@ -318,7 +322,13 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
     output: Dict[str, List[Dict[str, Scalar]]] = {name: [] for name in names}
     wanted = set(names if requested is None else requested)
     schemas = {name: table_schema(name) for name in names}
-    diagnostics = [_issue_row(issue) for issue in graph.load_issues] if "issues" in wanted else []
+    diagnostics = [_issue_row(issue) for issue in graph.load_issues
+                   if "unresolved_record" not in issue.context] if "issues" in wanted else []
+    unresolved_issues: Dict[str, List[Issue]] = {}
+    for issue in graph.load_issues if "issues" in wanted else ():
+        if "unresolved_record" in issue.context:
+            marker = _encode((issue.context["unresolved_address"], issue.context["unresolved_record"]))
+            unresolved_issues.setdefault(marker, []).append(issue)
 
     def normalize(
         row: Dict[str, Any], table: str, kind: str, key: str,
@@ -360,7 +370,12 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
         if table not in wanted:
             continue
         for entity in graph._values(kind):
-            for target in getattr(entity, field):
+            targets = set(getattr(entity, field))
+            if table == "exam_registry":
+                targets = {resolved.key for target in targets
+                           for resolved in graph._resolve_reference("registry", target)} | {
+                               target for target in targets if not graph._resolve_reference("registry", target)}
+            for target in targets:
                 output[table].append(dict(source_key=_encode(entity.key), target_key=_encode(target)))
 
     unresolved: List[Tuple[Any, Any, str, str]] = []
@@ -383,6 +398,9 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
         occurrence = occurrences.get(base, 0)
         occurrences[base] = occurrence + 1
         key = _encode((base, occurrence))
+        marker = _encode((address, record.to_dict())) if hasattr(record, "to_dict") else ""
+        for issue in unresolved_issues.get(marker, ()):
+            diagnostics.append(_issue_row(issue, kind, key))
         row = {name: getattr(record, name, None) for name in table_schema("unresolved").columns}
         row.update(record_key=key, address=_encode(address), kind=kind, reason=reason, incomplete=True)
         for part in address if isinstance(address, tuple) else ():
@@ -410,6 +428,7 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
             # Match keyed registry projection: parse the original date rather
             # than the date property's truncated text; use typed code facts.
             row["diagnosis_date"] = record.payload.get("diagnosis_date")
+            row["record_id"] = record.payload.get("record_id")
             for field in _CODES["registry"]:
                 _code_fields(row, field, getattr(record, field))
         if isinstance(record, UnkeyedFinding):

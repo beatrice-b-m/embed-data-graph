@@ -194,3 +194,69 @@ def test_first_split_retains_an_existing_known_side_not_addressed_by_new_rows(mo
     assert by_side(graph)[Laterality.BILATERAL] is original
     assert original.source_finding_number == "1"
     assert original.interpretation.assessment.code == "B"
+
+
+def test_ambiguous_clinical_records_keep_exam_links_and_joinable_diagnostics():
+    report = load_embed(
+        magview=[row("L"), row("R", bside="R", type="B", procdate_anon="2020-01-20", path_severity=0)],
+        pathology=[row("R", report="report", path_severity=0)],
+        columns={"pathology": {"record_id": "report"}},
+    )
+    graph = report.graph
+    assert len(graph.records("procedure_exams")) == 1
+    assert len(graph.records("pathology_exams")) == 2
+    assert len(graph.exam("A").pathology) == 2
+    issues = [item for item in graph.records("issues") if item["code"] == "ambiguous_finding_reference"]
+    clinical_keys = {(kind, item["entity_key"]) for kind in ("procedure", "pathology")
+                     for item in graph.records("procedures" if kind == "procedure" else "pathology")}
+    assert {(item["kind"], item["entity_key"]) for item in issues} == clinical_keys
+    for issue in report.issues:
+        if issue.code == "ambiguous_finding_reference":
+            assert issue.context["finding_key"] == ("A", "1")
+            assert {candidate["laterality"] for candidate in issue.context["candidates"]} == {"L", "R"}
+    assert all(not finding.pathology and not finding.procedures for finding in graph.findings)
+    part = graph.partition(level="exam", key=lambda exam: exam.accession_number)["A"]
+    assert len(part.pathology) == 2
+    assert len([issue for issue in part.load_issues if issue.code == "ambiguous_finding_reference"]) == 3
+
+
+def test_incomplete_ambiguous_pathology_is_exam_scoped_with_record_diagnostic():
+    report = load_embed(magview=[row("L"), row("R", path_severity=0,
+                        bdate_anon="2020-01-20", proc_type="B", path_side="R")])
+    graph = report.graph
+    assert not graph.pathology  # Non-default procedure columns do not establish identity.
+    records = graph.records("unresolved")
+    (record,) = [item for item in records if item["kind"] == "pathology"]
+    assert record["accession_number"] == "A" and record["finding_number"] == "1"
+    assert ("clinical", "pathology", ("exam", "A"), ("finding", ("A", "1"))) in graph.unresolved_records
+    (issue,) = [item for item in graph.records("issues") if item["code"] == "ambiguous_finding_reference"]
+    assert issue["kind"] == "pathology" and issue["entity_key"] == record["record_key"]
+    # Explicit column binding establishes the procedure and pathology identity.
+    mapped = load_embed(magview=[row("L"), row("R", path_severity=0,
+                        bdate_anon="2020-01-20", proc_type="B", path_side="R")], columns={
+        "procedures": {"performed_date": "bdate_anon", "procedure_type": "proc_type", "laterality": "path_side"},
+        "pathology": {"procedure_date": "bdate_anon", "procedure_type": "proc_type", "laterality": "path_side"},
+    }).graph
+    assert len(mapped.pathology) == 1 and len(mapped.records("pathology_exams")) == 1
+
+
+def test_splitting_existing_clinical_links_retains_exam_context():
+    graph = load_embed(magview=[row("L", bside="L", type="B", procdate_anon="2020-01-01", path_severity=0)]).graph
+    procedure, = graph.procedures
+    pathology, = graph.pathology
+    load_embed(findings=[row("L"), row("R")], into=graph)
+    assert procedure.exam_references == {"A"}
+    assert pathology.exam_references == {"A"}
+    assert graph.exam("A").pathology == (pathology,)
+
+
+
+def test_corrected_ambiguous_record_clears_its_incomplete_snapshot():
+    graph = load_embed(magview=[row("L"), row("R", path_severity=0)]).graph
+    part = graph.partition(level="exam", key=lambda exam: exam.accession_number)["A"]
+    assert any(issue["code"] == "ambiguous_finding_reference" for issue in part.records("issues"))
+    selection = graph.select(level="exam", predicate=lambda exam: True)
+    assert any(issue["code"] == "ambiguous_finding_reference" for issue in selection.records("issues"))
+    load_embed(magview=[row("R", path_severity=0, bside="R", type="B", procdate_anon="2020-01-20")], into=graph)
+    assert not [item for item in graph.records("unresolved") if item["kind"] == "pathology"]
+    assert len(graph.records("pathology_exams")) == 1

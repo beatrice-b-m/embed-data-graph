@@ -137,7 +137,8 @@ def load_embed(
         splitting. Once split, missing/invalid sides have an UNKNOWN group and
         supplied nulls a bilateral group. Partial reloads keep split identities.
         Number-only procedure/pathology references remain unresolved with
-        ``ambiguous_finding_reference``; biopsy side does not select a finding.
+        ``ambiguous_finding_reference`` addressed to the clinical record; exam
+        links are retained. Biopsy side does not select a finding.
         On first split, an existing finding is reused only for its known side;
         an UNKNOWN aggregate is detached rather than copied into either side.
     images, rois : iterable of mappings or DataFrame-like, optional
@@ -176,13 +177,17 @@ def load_embed(
         Default None. Wide and narrow projections are reconciled together.
     registry : iterable of mappings or DataFrame-like, optional
         Patient-scoped registry entries keyed by patient and registry ID,
-        which default to ``empi_anon`` and ``cancer_outcome_registry_id``, the
-        columns of the MagView pointer. Default None. A row with a patient but
+        plus tumor record ID when present. Defaults bind ``empi_anon``,
+        ``cancer_outcome_registry_id`` and ``TUMOR_RECORD_NUMBER``. Missing tumor
+        IDs retain two-part keys and ordinary conflict handling. MagView's
+        two-part pointer reaches every tumor in that patient/registry group,
+        regardless of load order. Default None. A row with a patient but
         no registry ID is kept as an ``UnkeyedRegistryEntry`` of that patient
         with an INFO ``unkeyed_registry_entries`` issue; refresh replaces each
         addressed patient's unkeyed records and merge preserves them with a
-        ``registry_merge_requires_registry_id`` warning. Payload columns are
-        unbound by default and must be configured explicitly.
+        ``registry_merge_requires_registry_id`` warning. Registry fact columns
+        have default bindings; use ``columns`` to override them or bind
+        ``record_id`` to a documented alternative.
     into : DatasetGraph or None, optional
         Existing graph to mutate in place; None creates a graph. Existing entity
         objects and consumer metadata survive refresh at matching semantic keys.
@@ -1012,11 +1017,6 @@ def _split_finding_groups(
             else:
                 # An earlier UNKNOWN aggregate cannot safely seed either side.
                 graph.remove(existing)
-            if references:
-                issues.append(Issue(
-                    "ambiguous_finding_reference", "Existing finding reference now has multiple targets",
-                    context={"grain": "finding", "key": key},
-                ))
         for side, side_rows in sorted(buckets.items(), key=lambda item: item[0].value):
             sibling = siblings.get(side)
             split_key = sibling.key if sibling is not None else allocate(accession, number, side)

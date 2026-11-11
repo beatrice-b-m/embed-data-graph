@@ -24,7 +24,7 @@ These annotations do not introduce runtime validation or new root exports.
 The graph holds eight entity kinds, each keyed by its source identity:
 patient (`patient_id`), exam (`accession_number`), finding
 (`(accession_number, finding_number)`), procedure (`ProcedureIdentity`),
-pathology (`identity`), registry entry (`(patient_id, registry_id)`), image
+pathology (`identity`), registry entry (`(patient_id, registry_id)` or `(patient_id, registry_id, record_id)`), image
 (`image_id`) and ROI (`(image_id, roi_key)`).
 
 For repeated EMBED numbers with different populated sides, `load_embed` assigns
@@ -310,6 +310,23 @@ Targets are never deleted by clearing associations. Registry keys remain
 
 Registry identity maps `patient_id` to `empi_anon` and `registry_id` to
 `cancer_outcome_registry_id`, the same columns as the MagView assignment pointer.
+The optional `record_id` binds to `TUMOR_RECORD_NUMBER`. When present, it adds a
+third component to the registry key, preserving each tumor's facts. Null, absent,
+or unbound record IDs keep the legacy pair and its usual conflict behavior.
+`graph.registry_entry(patient_id, registry_id, record_id=None)` is an exact
+lookup: omitting the tumor ID does not select an arbitrary tumor. The two-part
+MagView pointer and two-part `Exam.registry_references` entries reach every
+registered tumor in that patient/registry group, including later additions.
+Explicit three-part references name one tumor. Mixed rows with and without tumor
+IDs remain separate entries; the loader does not guess which tumor a missing ID
+belongs to. `CancerRegistryEntry.record_id` is optional text and participates in
+rekeying, copying and serialization.
+
+The connected catalog describes registry groups but does not document the
+physical tumor-number columns. The default follows the supplied registry example;
+use `columns={"registry": {"record_id": "SEQUENCE_NUMBER"}}` only when that column
+is documented as the per-tumor key in the input. No automatic alias or date-based
+identity fallback is used.
 The payload binds the registry file's `DATE_OF_DIAGNOSIS_ANON`, `LATERALITY`,
 `HISTOLOGY_ICDO3`, `BEHAVIOR_ICDO3`, `PRIMARY_SITE`, `T_Stage`, `N_Stage`,
 `M_Stage`, `STAGE_GRP`, `ESTROGEN_RECEPTOR`, `PROGESTERONE_RECEPTOR`, `HER2` and
@@ -392,3 +409,14 @@ including severity, procedure code and dates. The raw
 `Patient.invalid_accession_records` remain available. For unkeyed findings,
 `reported_laterality` follows the keyed EMBED null-side rule: supplied null
 is bilateral; absent/unbound and unrecognized sides are UNKNOWN.
+
+
+When a finding number is split, clinical entities retain their unambiguous exam
+link while the original finding reference remains unresolved. Each
+`ambiguous_finding_reference` diagnostic identifies the clinical `grain` and
+`identity`, plus the original `finding_key` and candidate finding keys/sides.
+In the `issues` projection, `kind` and `entity_key` join to that clinical entity.
+Incomplete records stay exam-scoped snapshots; their projected diagnostic joins
+`unresolved.record_key` rather than inventing an entity identity. A missing
+procedure identity still requires complete mapped procedure columns or a
+patient-scoped pathology record ID; finding ambiguity does not supply one.
