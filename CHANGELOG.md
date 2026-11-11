@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Leading BI exam descriptions (#33)
+
+- Recognize a leading `BI` token, ignoring case and initial whitespace, as
+  bilateral at the same priority as `bil`. Embedded text such as `biopsy`
+  does not trigger this rule.
+
 ### Typed facts on unresolved records (#28, #30)
 
 - Project unkeyed findings' mammography descriptors in `unresolved` as the same

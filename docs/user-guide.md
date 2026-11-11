@@ -106,8 +106,8 @@ assert imaged is Laterality.LEFT and imaged.expand() == (Laterality.LEFT,)
 assert Exam("A-011", description="MG Screening").imaged_laterality is Laterality.UNKNOWN
 ```
 
-The description is searched for `bil`, then `left`, then `right`, ignoring
-case; one that names none of them leaves the laterality UNKNOWN. Use
+The description is searched for a leading `bi` token (after optional whitespace)
+or `bil`, then `left`, then `right`, ignoring case; one that names none of them leaves the laterality UNKNOWN. Use
 `add_*`, `attach`, `detach`, `replace_rois`, or an update of the stored keys to
 change them. Changing a key (with `rekey`, `update` or plain assignment) is
 propagated to every object that stored the old key, after checking the whole

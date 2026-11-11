@@ -227,7 +227,8 @@ ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values
 `exam.imaged_laterality` is the `Laterality` of the breasts an exam imaged:
 LEFT, RIGHT, BILATERAL or UNKNOWN, with `.expand()` giving the sides. No EMBED
 column records it. The exam description is searched case-insensitively for the
-substrings `bil` (BILATERAL), else `left` (LEFT), else `right` (RIGHT), else it
+leading token `bi` (after optional whitespace) or substring `bil` (BILATERAL),
+else `left` (LEFT), else `right` (RIGHT), else it
 is UNKNOWN; the order settles descriptions that name several sides. Finding
 sides and image laterality are never used: findings list breasts with a finding,
 and image metadata may cover only part of an exam. UNKNOWN never defaults to a

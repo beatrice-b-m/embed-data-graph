@@ -10,6 +10,9 @@ from embed_data_graph import DatasetGraph, Exam, Finding, Laterality, MammogramI
     [
         ("MG Screening Bilateral w/ Tomo", Laterality.BILATERAL),
         ("mg screen bilat", Laterality.BILATERAL),
+        ("BI Diagnostic", Laterality.BILATERAL),
+        ("  bi Diagnostic Left", Laterality.BILATERAL),
+        ("BI-Diagnostic Right", Laterality.BILATERAL),
         ("MG Diagnostic Left", Laterality.LEFT),
         ("US BREAST RIGHT LIMITED", Laterality.RIGHT),
     ],
@@ -29,7 +32,7 @@ def test_several_sides_resolve_in_fixed_order_bilateral_left_right(description, 
     assert Exam("A", description=description).imaged_laterality is expected
 
 
-@pytest.mark.parametrize("description", [None, "", "MG Screening", "US Breast Rt Limited"])
+@pytest.mark.parametrize("description", [None, "", "MG Screening", "US Breast Rt Limited", "Biopsy", "MG bi diagnostic"])
 def test_a_description_naming_no_side_is_unknown_with_no_sides(description):
     imaged = Exam("A", description=description).imaged_laterality
 
