@@ -25,7 +25,8 @@ from embed_data_graph.clinical.histories import (
 )
 from embed_data_graph.clinical.interpretations import ImagingInterpretation
 from embed_data_graph.clinical.patients import Patient
-from embed_data_graph.clinical.pathology import UnresolvedClinicalRecord
+from embed_data_graph.clinical.pathology import Pathology, UnresolvedClinicalRecord
+from embed_data_graph.clinical.procedures import Procedure
 from embed_data_graph.core.anatomy import AnatomicalPosition, Quadrant
 from embed_data_graph.core.codes import Code, Vocabulary
 from embed_data_graph.core.graph import DatasetGraph
@@ -129,6 +130,16 @@ def load_embed(
     patients, exams, findings : iterable of mappings or DataFrame-like, optional
         Narrow clinical tables. Default None skips the grain. Each iterable is
         consumed and materialized once; rows need semantic IDs in mapped columns.
+        Findings sharing an accession and number but different populated valid
+        sides split into separate findings with opaque disambiguated numbers,
+        retaining ``source_finding_number`` and reporting
+        ``duplicate_finding_number``. Missing/null sides alone do not initiate
+        splitting. Once split, missing/invalid sides have an UNKNOWN group and
+        supplied nulls a bilateral group. Partial reloads keep split identities.
+        Number-only procedure/pathology references remain unresolved with
+        ``ambiguous_finding_reference``; biopsy side does not select a finding.
+        On first split, an existing finding is reused only for its known side;
+        an UNKNOWN aggregate is detached rather than copied into either side.
     images, rois : iterable of mappings or DataFrame-like, optional
         Image metadata and complete image-local ROI collections. Default None
         skips explicit input. Image rows can also project ROI collections.
@@ -337,7 +348,14 @@ def load_embed(
     claims: Claims = {}
     _load_patients(core_rows["patients"], graph, column_maps["patients"], mode, issues)
     _load_exams(core_rows["exams"], graph, column_maps["exams"], mode, issues, claims)
-    _load_findings(core_rows["findings"], graph, column_maps["findings"], mode, issues, resolved_scope, claims)
+    finding_references = {
+        key for table, grain in (("procedures", "procedures"), ("pathology", "pathology"),
+                                 ("magview", "procedures"), ("magview", "pathology"))
+        for row in materialized[table]
+        if (key := _semantic_key(row.mapping, column_maps[grain], ("accession", "finding_number"))) is not None
+    }
+    _load_findings(core_rows["findings"], graph, column_maps["findings"], mode, issues,
+                   resolved_scope, claims, finding_references)
     _load_body_measurements(materialized["body_measurements"], graph, column_maps["body_measurements"], mode, issues)
 
     history_patients = _load_history(
@@ -911,6 +929,102 @@ def _load_exams(
         _claim_exam_from_rows(graph, exam, group, columns, claims)
 
 
+def _split_finding_groups(
+    groups: dict[Any, list[_InputRow]],
+    graph: DatasetGraph,
+    columns: Mapping[str, Optional[str]],
+    issues: list[Issue],
+    source_references: set[Any],
+) -> tuple[dict[Any, list[_InputRow]], dict[Any, str]]:
+    """Separate populated sides without changing ordinary two-part keys.
+
+    Missing sides do not initiate a split. Once a number is split, rows without
+    a side have their own UNKNOWN bucket, and supplied nulls have a B bucket.
+    Previously split numbers remain split on partial refreshes.
+    """
+
+    source_keys = set(groups) | source_references
+    reserved = source_keys | {finding.key for finding in graph.findings}
+    clinical_entities: list[Union[Procedure, Pathology]] = [*graph.procedures, *graph.pathology]
+    for entity in clinical_entities:
+        reserved.update(entity.finding_references)
+
+    def allocate(accession: str, number: str, side: Laterality) -> tuple[str, str]:
+        candidate = f"{number}~{side.value}"
+        while (accession, candidate) in reserved:
+            candidate += "~"
+        key = (accession, candidate)
+        reserved.add(key)
+        return key
+
+    known: dict[Any, dict[Laterality, Finding]] = {}
+    for finding in graph.findings:
+        number = finding.source_finding_number
+        if number is None:
+            continue
+        # A later source number may literally equal an allocated split number.
+        # Move the generated key first, preserving its existing graph links.
+        if finding.key in source_keys:
+            graph.rekey(finding, finding_number=allocate(finding.accession_number, number, finding.laterality)[1])
+        known.setdefault((finding.accession_number, number), {})[finding.laterality] = finding
+
+    result: dict[Any, list[_InputRow]] = {}
+    sources: dict[Any, str] = {}
+    column = columns.get("laterality")
+    for key in sorted(groups, key=repr):
+        group = groups[key]
+        populated = {Laterality.coerce(value) for row in group
+                     if (value := cell(row.mapping, column)) is not None}
+        populated.discard(Laterality.UNKNOWN)
+        siblings = known.get(key, {})
+        if len(populated) < 2 and not siblings:
+            result[key] = group
+            continue
+        accession, number = key
+        buckets: dict[Laterality, list[_InputRow]] = {}
+        for row in group:
+            value = cell(row.mapping, column)
+            side = (Laterality.BILATERAL if value is None and column in row.mapping
+                    else Laterality.coerce(value))
+            buckets.setdefault(side, []).append(row)
+        existing = graph.finding(accession, number)
+        sides = set(buckets) | set(siblings)
+        if existing is not None and existing.laterality is not Laterality.UNKNOWN:
+            sides.add(existing.laterality)
+        issues.append(Issue(
+            "duplicate_finding_number", "Finding number is shared by different sides",
+            context={"grain": "finding", "key": key, "accession": accession,
+                     "finding_number": number,
+                     "sides": sorted(side.value for side in sides)},
+        ))
+        if existing is not None:
+            # Existing number-only clinical links must not silently choose the
+            # side of an object we reuse. Keep their original unresolved key.
+            references = [(entity, set(entity.finding_references))
+                          for entity in clinical_entities
+                          if key in entity.finding_references]
+            if existing.laterality is not Laterality.UNKNOWN:
+                new_key = allocate(accession, number, existing.laterality)
+                graph.update(existing, finding_number=new_key[1], source_finding_number=number)
+                siblings[existing.laterality] = existing
+                for entity, keys in references:
+                    graph.update(entity, finding_references=keys)
+            else:
+                # An earlier UNKNOWN aggregate cannot safely seed either side.
+                graph.remove(existing)
+            if references:
+                issues.append(Issue(
+                    "ambiguous_finding_reference", "Existing finding reference now has multiple targets",
+                    context={"grain": "finding", "key": key},
+                ))
+        for side, side_rows in sorted(buckets.items(), key=lambda item: item[0].value):
+            sibling = siblings.get(side)
+            split_key = sibling.key if sibling is not None else allocate(accession, number, side)
+            result[split_key] = side_rows
+            sources[split_key] = number
+    return result, sources
+
+
 def _load_findings(
     rows: Sequence[_InputRow],
     graph: DatasetGraph,
@@ -919,6 +1033,7 @@ def _load_findings(
     issues: list[Issue],
     source_scope: str,
     claims: Claims,
+    source_references: set[Any],
 ) -> None:
     rows = _retain_unkeyed_findings(rows, graph, columns, mode, issues, claims)
     groups = _group_rows(
@@ -928,6 +1043,7 @@ def _load_findings(
         "finding",
         issues,
     )
+    groups, source_numbers = _split_finding_groups(groups, graph, columns, issues, source_references)
     for key in sorted(groups, key=repr):
         group = groups[key]
         accession, finding_number = key
@@ -956,7 +1072,7 @@ def _load_findings(
             # A supplied null side is a populated bilateral fact, so merge
             # applies it like any other supplied value.
             fields["laterality"] = laterality
-        record_type = _finding_record_type(fields.get("record_type"), finding_number)
+        record_type = _finding_record_type(fields.get("record_type"), source_numbers.get(key, finding_number))
         interpretation = _interpretation(
             fields.get("assessment"),
             fields.get("recommendation"),
@@ -1027,6 +1143,7 @@ def _load_findings(
                 accession_number=accession,
                 laterality=laterality,
                 finding_number=finding_number,
+                source_finding_number=source_numbers.get(key),
                 finding_type=updates.get("finding_type"),
                 interpretation=updates.get("interpretation"),
                 anatomical_position=updates.get("anatomical_position"),

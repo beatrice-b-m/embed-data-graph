@@ -801,3 +801,35 @@ finding = graph.exam("A").unkeyed_findings[0]
 assert finding.reported_laterality.value == "B"  # Supplied null means bilateral.
 assert finding.laterality.value == "UNKNOWN"    # No finding identity inferred.
 ```
+
+
+## Repeated finding numbers on different sides
+
+A source exam may number both its left and right findings `1`. The loader keeps
+their assessments and descriptors separate and emits `duplicate_finding_number`.
+The graph numbers are opaque; read `source_finding_number` for the reported number.
+
+```python
+from embed_data_graph import Laterality, load_embed
+
+report = load_embed(findings=[
+    {"acc_anon": "DUP", "numfind": 1, "side": "L", "asses": "B", "massshape": "O"},
+    {"acc_anon": "DUP", "numfind": 1, "side": "R", "asses": "S", "calcfind": "A"},
+])
+exam = report.graph.exam("DUP")
+left, = exam.breast_sides[Laterality.LEFT].findings
+right, = exam.breast_sides[Laterality.RIGHT].findings
+assert left.key != right.key
+assert left.source_finding_number == right.source_finding_number == "1"
+assert left.interpretation.assessment.code == "B"
+assert right.interpretation.assessment.code == "S"
+assert report.graph.finding("DUP", "1") is None
+```
+
+Same-side rows still combine with ordinary conflict diagnostics. One populated
+side plus missing/null rows keeps the existing grouping. For an already split
+number, missing/invalid sides stay in their own UNKNOWN group, and null sides in
+a bilateral group. Partial reloads retain the other sides and live objects.
+Clinical references to just `(accession, numfind)` remain unresolved and emit
+`ambiguous_finding_reference`, including those in wide MagView rows. Review the
+source before attaching those procedures or pathology bundles to a split finding.

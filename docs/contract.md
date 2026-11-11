@@ -47,12 +47,32 @@ remain. Merge adds claims. The claims an exam asserts therefore do not depend
 on the order in which tables are loaded. An image row whose patient column
 disagrees with its EMBED path claims the column's patient and is reported.
 
-A finding's side is an attribute, not part of its identity. In EMBED a supplied
+A finding's side is an attribute, not part of its two-part graph key. In EMBED a supplied
 null finding side means bilateral (code `B`) and projects to both breast sides;
 a side column absent from every row leaves the side unknown. Finding sides list
 the breasts with a finding, not the breasts imaged; an exam's imaged laterality
 comes from its description only, and an underivable one stays unknown rather
 than defaulting to a side.
+
+When rows in one load repeat `(accession, numfind)` with different populated
+valid finding sides, the loader separates their facts by side and reports
+`duplicate_finding_number` with the accession, source number and sides.
+Ordinary findings keep their existing keys. Split findings have distinct opaque
+`finding_number` values and retain the original in `source_finding_number`.
+Missing/null sides alone do not trigger splitting: an L row plus a null or
+absent-side row keeps the existing L grouping and ordinary field conflicts.
+Once split, rows with absent/invalid sides form an UNKNOWN group, while supplied
+nulls form a bilateral group; neither is pooled into an L or R group.
+
+Split identities persist across partial refresh/merge calls and graph copies.
+Rows sharing a side still reconcile normally. A first split reuses an existing
+known-side object for that side, preserving its consumer state; an old UNKNOWN
+aggregate is detached because its pooled facts cannot safely seed either side.
+Previously stored number-only procedure/pathology links, and new references
+from both wide and narrow clinical rows, remain at the original unresolved key
+with `ambiguous_finding_reference`. Neither finding side nor biopsy side is used
+to infer these links. Consumers may explicitly attach a resolved clinical entity
+to the intended split finding after reviewing the source.
 
 Procedure identity requires patient, performed date, procedure type, and laterality.
 Pathology uses an explicit patient-scoped record ID or, for MagView rows, the

@@ -77,8 +77,9 @@ def test_finding_refresh_respects_unbound_fields_and_conflicting_merge_values():
     assert finding.finding_type == "consumer"  # default finding_type is unbound
     assert finding.laterality is Laterality.LEFT  # an absent side column is not supplied
     load_embed(findings=[{"acc_anon":"A", "numfind":1,"side":"L"},{"acc_anon":"A", "numfind":1,"side":"R"}], mode="merge", into=graph)
-    assert finding.laterality is Laterality.UNKNOWN
-    assert Laterality.LEFT not in graph.exam("A").breast_sides
+    assert finding.laterality is Laterality.LEFT
+    assert graph.exam("A").breast_sides[Laterality.LEFT].findings == (finding,)
+    assert len(graph.exam("A").breast_sides[Laterality.RIGHT].findings) == 1
 
 
 def test_supplied_generators_are_consumed_once():
