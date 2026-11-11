@@ -97,6 +97,8 @@ def table_schema(name: str) -> TableSchema:
         columns.update({field: _type(field) for field in _FIELDS[name].split()})
         for field in _CODES.get(name, ()):
             columns.update({field: "string", field + "_meaning": "string"})
+        if name == "findings":
+            columns.update(source_finding_number="string")
         key = ("entity_key",)
     elif name in _LINKS:
         columns = {"source_key": "string", "target_key": "string"}
@@ -253,6 +255,7 @@ def _entity_row(entity: Any, table: str, graph: DatasetGraph) -> Dict[str, Any]:
     if table == "registry":
         row["diagnosis_date"] = entity.payload.get("diagnosis_date")
     if table == "findings":
+        row["source_finding_number"] = entity.source_finding_number
         position = entity.anatomical_position
         if position is not None:
             row.update(quadrant_ml=position.quadrant.ml, quadrant_si=position.quadrant.si,

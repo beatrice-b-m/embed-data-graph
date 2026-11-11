@@ -53,6 +53,7 @@ class _Snapshot:
     merge: bool
     issues: List[Issue]
     claims: Claims
+    split_findings: Set[Tuple[str, str]] = field(default_factory=set)
     addressed: Set[Any] = field(default_factory=set)
     unresolved: Dict[Any, List[Dict[str, Any]]] = field(default_factory=lambda: defaultdict(list))
 
@@ -113,6 +114,8 @@ def load_clinical(
     if mode not in {"refresh", "merge"}:
         raise ValueError("mode must be 'refresh' or 'merge'")
     state = _Snapshot(graph, mode == "merge", issues, claims)
+    state.split_findings = {(item.accession_number, item.source_finding_number)
+                            for item in graph.findings if item.source_finding_number is not None}
     procedure_rows: Dict[Hashable, List[_ProcedureRow]] = defaultdict(list)
     pathology_rows: Dict[Hashable, List[_PathologyRow]] = defaultdict(list)
     for rows, wide in ((procedures, False), (magview, True)):
@@ -142,7 +145,7 @@ def _collect_procedure(
 ) -> None:
     if wide and cell(row, columns.get("performed_date")) is None and cell(row, columns.get("procedure_type")) is None:
         return  # A MagView row without procedure facts describes only a finding.
-    attachment = _attachment(row, columns)
+    attachment = _attachment(row, columns, state)
     _claim(state, row, "magview" if wide else "procedures", columns)
     record_attachment = _record_attachment(attachment, row, columns)
     state.addressed.add(("clinical", "procedure", record_attachment))
@@ -167,7 +170,7 @@ def _collect_pathology(
     if not fields and not descriptors and record_id is None:
         return
     _claim(state, row, table, columns)
-    attachment = _attachment(row, columns)
+    attachment = _attachment(row, columns, state)
     # The row addresses its own exam or finding even when it resolves, so a
     # corrected row replaces what an earlier incomplete one left there.
     state.addressed.add(("clinical", "pathology", _record_attachment(attachment, row, columns)))
@@ -440,11 +443,18 @@ def _identifiers(value: Any) -> List[str]:
     return [normalized for normalized in (identifier(item) for item in values) if normalized is not None]
 
 
-def _attachment(row: Mapping[str, Any], columns: ColumnMap) -> Attachment:
+def _attachment(row: Mapping[str, Any], columns: ColumnMap, state: _Snapshot) -> Attachment:
     accession = _id_at(row, columns.get("accession"))
     if accession is None:
         return None
     finding = _id_at(row, columns.get("finding_number"))
+    if finding is not None and (accession, finding) in state.split_findings:
+        state.issues.append(Issue(
+            "ambiguous_finding_reference", "Source finding number has multiple side-specific targets",
+            context={"grain": "finding", "key": (accession, finding)},
+        ))
+    # Keep the reported number as an unresolved reference, never attach it to
+    # every split lesion or infer a finding side from biopsy laterality.
     return ("finding", (accession, finding)) if finding is not None else ("exam", accession)
 
 

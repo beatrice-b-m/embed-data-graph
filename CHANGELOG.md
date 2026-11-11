@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Repeated finding numbers on different sides (#32)
+
+- Separate rows with the same accession/number and different populated valid
+  finding sides; keep each side's descriptors, assessment and recommendation.
+  Emit `duplicate_finding_number` with the source number and sides.
+- Preserve ordinary two-part keys. Split findings use distinct opaque numbers
+  and expose `source_finding_number` in the object, serialization and an appended
+  `findings` table column. Use breast-side views or `exam.findings` to find them;
+  the original number alone no longer resolves.
+- Keep missing/null-side grouping unchanged unless a number is split. In split
+  groups, absent/invalid sides remain UNKNOWN and null sides remain bilateral.
+  Partial refresh/merge preserves the split. An existing known-side object is
+  reused; an earlier UNKNOWN aggregate is detached to avoid carrying pooled
+  facts into either side.
+- Leave number-only clinical references unresolved, including existing links
+  and wide MagView rows, and report `ambiguous_finding_reference`. Explicit
+  consumer attachment is available after source review.
+
+
+### Leading BI exam descriptions (#33)
+
+- Recognize a leading `BI` token, ignoring case and initial whitespace, as
+  bilateral at the same priority as `bil`. Embedded text such as `biopsy`
+  does not trigger this rule.
+
 ### Typed facts on unresolved records (#28, #30)
 
 - Project unkeyed findings' mammography descriptors in `unresolved` as the same

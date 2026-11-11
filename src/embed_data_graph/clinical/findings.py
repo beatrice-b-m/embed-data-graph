@@ -157,6 +157,7 @@ class Finding(MutableEntity):
         Breast side, coerced; an attribute, not part of the key.
     finding_number : str
         Finding number within the accession, stored as text; part of the key.
+        Side-split EMBED findings use opaque disambiguated numbers here.
         EMBED uses ``-9`` for a synthetic contralateral negative finding.
     finding_type : str or None, optional
         Reported finding category. Default None.
@@ -178,6 +179,11 @@ class Finding(MutableEntity):
         FINDING or SYNTHETIC_CONTRALATERAL_NEGATIVE. Default FINDING.
     source : SourceRef or None, optional
         Row the finding was read from.
+    source_finding_number : str or None, optional
+        Original EMBED number when the loader disambiguates a repeated number
+        by side; otherwise None. Not part of the key. Default None. Split
+        ``finding_number`` values are opaque identifiers; use this field to
+        recover the source number. Included in serialization and graph copies.
 
     Notes
     -----
@@ -193,6 +199,8 @@ class Finding(MutableEntity):
     """Exam accession; part of the key."""
     finding_number: str
     """Finding number within the accession; part of the key."""
+    source_finding_number: Optional[str]
+    """Original source number for side-split findings, otherwise None."""
     laterality: Laterality
     """Breast side; an attribute, not part of the key."""
     finding_type: Optional[str]
@@ -237,10 +245,12 @@ class Finding(MutableEntity):
         metadata: Optional[Mapping[str, Any]] = None,
         record_type: FindingRecordType = FindingRecordType.FINDING,
         source: Optional[object] = None,
+        source_finding_number: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.accession_number = accession_number
         self.finding_number = finding_number
+        self.source_finding_number = source_finding_number
         self.laterality = laterality
         self.finding_type = finding_type
         self.interpretation = interpretation
@@ -258,6 +268,8 @@ class Finding(MutableEntity):
     def _coerce(self, name: str, value: Any) -> Any:
         if name == "accession_number":
             return _required_text(value, "accession_number")
+        if name == "source_finding_number":
+            return None if value is None else _identifier_text(value, name)
         if name == "finding_number":
             return _identifier_text(value, "finding_number")
         if name == "laterality":
@@ -319,6 +331,7 @@ class Finding(MutableEntity):
         return {
             "accession_number": self.accession_number,
             "finding_number": self.finding_number,
+            "source_finding_number": self.source_finding_number,
             "laterality": self.laterality,
             "finding_type": self.finding_type,
             "record_type": self.record_type,

@@ -27,6 +27,17 @@ patient (`patient_id`), exam (`accession_number`), finding
 pathology (`identity`), registry entry (`(patient_id, registry_id)`), image
 (`image_id`) and ROI (`(image_id, roi_key)`).
 
+For repeated EMBED numbers with different populated sides, `load_embed` assigns
+opaque distinct `finding_number` values and sets
+`Finding.source_finding_number: Optional[str]` to the original number. The field
+is None on ordinary findings; it is serialized and copied but is not a key field.
+Use `exam.findings` or `exam.breast_sides` to retrieve the split objects;
+`graph.finding(accession, original_number)` returns None. Partial loads retain
+split keys. Generated keys avoid source-number collisions; if a later source
+number collides, the generated key is rekeyed and its explicit links follow it.
+See the [identity contract](contract.md#semantic-identity-and-ownership) for
+missing sides, first-split ownership, and unresolved clinical links.
+
 Entities store the *keys* of related entities, never object pointers: a
 finding stores its exam's accession, an ROI its image's ID, a procedure the
 keys of its findings and exams (`finding_references`, `exam_references`),
@@ -227,7 +238,8 @@ ImageLandmark, Box, anatomy values, enums, SourceRef and Issue are frozen values
 `exam.imaged_laterality` is the `Laterality` of the breasts an exam imaged:
 LEFT, RIGHT, BILATERAL or UNKNOWN, with `.expand()` giving the sides. No EMBED
 column records it. The exam description is searched case-insensitively for the
-substrings `bil` (BILATERAL), else `left` (LEFT), else `right` (RIGHT), else it
+leading token `bi` (after optional whitespace) or substring `bil` (BILATERAL),
+else `left` (LEFT), else `right` (RIGHT), else it
 is UNKNOWN; the order settles descriptions that name several sides. Finding
 sides and image laterality are never used: findings list breasts with a finding,
 and image metadata may cover only part of an exam. UNKNOWN never defaults to a

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
@@ -52,14 +53,14 @@ class BreastSide:
 def _description_laterality(description: Optional[str]) -> Laterality:
     """Return the breasts an exam description names, checked in a fixed order.
 
-    The description is lowercased and searched for substrings: ``bil`` means
-    BILATERAL, otherwise ``left`` means LEFT, otherwise ``right`` means RIGHT,
+    The description is lowercased: a leading ``bi`` token (after optional
+    whitespace) or the substring ``bil`` means BILATERAL, otherwise ``left`` means LEFT, otherwise ``right`` means RIGHT,
     otherwise UNKNOWN. The order settles descriptions that name several sides;
     this is the rule the EMBED cohort pipelines have used on ``desc``.
     """
 
     text = (description or "").lower()
-    if "bil" in text:
+    if "bil" in text or re.match(r"\s*bi\b", text):
         return Laterality.BILATERAL
     if "left" in text:
         return Laterality.LEFT
@@ -348,8 +349,8 @@ class Exam(MutableEntity):
         """Which breasts this exam imaged, derived from its description on each access.
 
         No EMBED column records the imaged breasts. The description is
-        searched case-insensitively for substrings in order: ``bil`` is
-        BILATERAL, else ``left`` is LEFT, else ``right`` is RIGHT, else
+        searched case-insensitively: a leading ``bi`` token (after optional
+        whitespace) or the substring ``bil`` is BILATERAL, else ``left`` is LEFT, else ``right`` is RIGHT, else
         UNKNOWN. Findings and images are never used: a finding side lists a
         breast with a finding, and image metadata may cover only part of an
         exam. UNKNOWN never defaults to a side; ``imaged_laterality.expand()``

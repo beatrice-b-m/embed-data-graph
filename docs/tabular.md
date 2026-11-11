@@ -560,3 +560,10 @@ Key: `issue_key`
 | `message` | string |
 | `severity` | string |
 | `context` | string |
+
+
+The `findings` table appends `source_finding_number` (nullable string). It is
+populated when repeated source numbers were split by side; `finding_number` then
+contains the opaque disambiguated graph number. Ordinary rows have null
+`source_finding_number`. Clinical link tables keep ambiguous original targets,
+which remain unresolved, and `issues` records `ambiguous_finding_reference`.
