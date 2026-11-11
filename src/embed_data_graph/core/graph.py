@@ -1051,7 +1051,8 @@ class DatasetGraph:
         from embed_data_graph.core.tabular import _encode, _issue_row
         keys = {(obj.kind, _encode(obj.key)) for kind in KINDS for obj in output._values(kind)}
         output.load_issues = tuple(issue for issue in self.load_issues
-                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys)
+                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys
+                                  or issue.context.get("unresolved_address") in output.unresolved_records)
         return output
 
     def is_context(self, entity: MutableEntity) -> bool:

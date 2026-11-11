@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Hashable, Iterable, List, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, Hashable, Iterable, List, Mapping, Optional, Set, Tuple, Union
 
 from embed_data_graph.clinical.exams import Exam
 from embed_data_graph.clinical.pathology import (
@@ -53,20 +53,34 @@ class _Snapshot:
     merge: bool
     issues: List[Issue]
     claims: Claims
-    split_findings: Set[Tuple[str, str]] = field(default_factory=set)
+    split_findings: Dict[Tuple[str, str], List[Dict[str, Any]]] = field(default_factory=dict)
     addressed: Set[Any] = field(default_factory=set)
     unresolved: Dict[Any, List[Dict[str, Any]]] = field(default_factory=lambda: defaultdict(list))
 
     def keep_unresolved(
         self, kind: str, attachment: Attachment, row: Mapping[str, Any], reason: str, columns: ColumnMap
     ) -> None:
-        address = ("clinical", kind, attachment)
+        original_attachment = attachment
+        candidates = self.split_findings.get(attachment[1], []) if attachment and attachment[0] == "finding" else []
+        if candidates and attachment is not None:
+            attachment = ("exam", attachment[1][0])
+            # Clear the old finding-addressed snapshot on refresh as well.
+            self.addressed.add(("clinical", kind, original_attachment))
+        address = (("clinical", kind, attachment, original_attachment) if candidates
+                   else ("clinical", kind, attachment))
         self.addressed.add(address)
         payload = deepcopy(dict(row))
         record = _unresolved_record(kind, reason, payload, columns)
         self.unresolved[address].append(
             {"payload": payload, "attachment": attachment, "reason": reason, "record": record}
         )
+        if candidates and original_attachment is not None:
+            self.issues.append(Issue(
+                "ambiguous_finding_reference", "Clinical record retains its exam; finding needs review",
+                context={"record_kind": kind, "unresolved_address": address,
+                         "unresolved_record": record.to_dict(), "finding_key": original_attachment[1],
+                         "candidates": candidates},
+            ))
         self.issues.append(
             Issue(
                 reason,
@@ -114,8 +128,7 @@ def load_clinical(
     if mode not in {"refresh", "merge"}:
         raise ValueError("mode must be 'refresh' or 'merge'")
     state = _Snapshot(graph, mode == "merge", issues, claims)
-    state.split_findings = {(item.accession_number, item.source_finding_number)
-                            for item in graph.findings if item.source_finding_number is not None}
+    state.split_findings = _split_finding_candidates(graph)
     procedure_rows: Dict[Hashable, List[_ProcedureRow]] = defaultdict(list)
     pathology_rows: Dict[Hashable, List[_PathologyRow]] = defaultdict(list)
     for rows, wide in ((procedures, False), (magview, True)):
@@ -128,6 +141,11 @@ def load_clinical(
         _apply_procedure(state, key, group)
     for key, pathology_group in pathology_rows.items():
         _apply_pathology(state, key, pathology_group)
+    _retain_ambiguous_exam_links(state)
+    for address in tuple(state.addressed):
+        attachment = address[2]
+        if attachment and attachment[0] == "finding" and attachment[1] in state.split_findings:
+            state.addressed.add(("clinical", address[1], ("exam", attachment[1][0]), attachment))
     _store_unresolved(state)
     _apply_registry(state, registry, columns["registry"])
     _apply_associations(state, magview, {**columns["exams"], **columns["magview"]})
@@ -145,7 +163,7 @@ def _collect_procedure(
 ) -> None:
     if wide and cell(row, columns.get("performed_date")) is None and cell(row, columns.get("procedure_type")) is None:
         return  # A MagView row without procedure facts describes only a finding.
-    attachment = _attachment(row, columns, state)
+    attachment = _attachment(row, columns)
     _claim(state, row, "magview" if wide else "procedures", columns)
     record_attachment = _record_attachment(attachment, row, columns)
     state.addressed.add(("clinical", "procedure", record_attachment))
@@ -170,7 +188,7 @@ def _collect_pathology(
     if not fields and not descriptors and record_id is None:
         return
     _claim(state, row, table, columns)
-    attachment = _attachment(row, columns, state)
+    attachment = _attachment(row, columns)
     # The row addresses its own exam or finding even when it resolves, so a
     # corrected row replaces what an earlier incomplete one left there.
     state.addressed.add(("clinical", "pathology", _record_attachment(attachment, row, columns)))
@@ -273,6 +291,39 @@ def _apply_pathology(state: _Snapshot, key: Hashable, group: List[_PathologyRow]
         graph.update(entity, **updates)
     for item in group:
         _link(graph, "pathology", key, item.attachment)
+
+
+def _split_finding_candidates(graph: DatasetGraph) -> Dict[Tuple[str, str], List[Dict[str, Any]]]:
+    result: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    for finding in graph.findings:
+        if finding.source_finding_number is not None:
+            result[(finding.accession_number, finding.source_finding_number)].append(
+                {"key": finding.key, "laterality": finding.laterality.value}
+            )
+    for candidates in result.values():
+        candidates.sort(key=lambda candidate: repr(candidate["key"]))
+    return result
+
+
+def _retain_ambiguous_exam_links(state: _Snapshot) -> None:
+    """Retain known exam context and address diagnostics to each clinical entity."""
+
+    entities: List[Union[Procedure, Pathology]] = [*state.graph.procedures, *state.graph.pathology]
+    for entity in entities:
+        references = set(entity.finding_references)
+        if isinstance(entity, Pathology):
+            for procedure in state.graph.parents(entity, "procedure"):
+                references.update(procedure.finding_references)
+        for finding_key in sorted(references, key=repr):
+            candidates = state.split_findings.get(finding_key)
+            if not candidates:
+                continue
+            _link(state.graph, entity.kind, entity.key, ("exam", finding_key[0]))
+            state.issues.append(Issue(
+                "ambiguous_finding_reference", "Clinical record retains its exam; finding needs review",
+                context={"grain": entity.kind, "identity": entity.key,
+                         "finding_key": finding_key, "candidates": candidates},
+            ))
 
 
 def _store_unresolved(state: _Snapshot) -> None:
@@ -443,16 +494,11 @@ def _identifiers(value: Any) -> List[str]:
     return [normalized for normalized in (identifier(item) for item in values) if normalized is not None]
 
 
-def _attachment(row: Mapping[str, Any], columns: ColumnMap, state: _Snapshot) -> Attachment:
+def _attachment(row: Mapping[str, Any], columns: ColumnMap) -> Attachment:
     accession = _id_at(row, columns.get("accession"))
     if accession is None:
         return None
     finding = _id_at(row, columns.get("finding_number"))
-    if finding is not None and (accession, finding) in state.split_findings:
-        state.issues.append(Issue(
-            "ambiguous_finding_reference", "Source finding number has multiple side-specific targets",
-            context={"grain": "finding", "key": (accession, finding)},
-        ))
     # Keep the reported number as an unresolved reference, never attach it to
     # every split lesion or infer a finding side from biopsy laterality.
     return ("finding", (accession, finding)) if finding is not None else ("exam", accession)

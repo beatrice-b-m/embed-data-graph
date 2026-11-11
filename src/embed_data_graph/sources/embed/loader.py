@@ -137,7 +137,8 @@ def load_embed(
         splitting. Once split, missing/invalid sides have an UNKNOWN group and
         supplied nulls a bilateral group. Partial reloads keep split identities.
         Number-only procedure/pathology references remain unresolved with
-        ``ambiguous_finding_reference``; biopsy side does not select a finding.
+        ``ambiguous_finding_reference`` addressed to the clinical record; exam
+        links are retained. Biopsy side does not select a finding.
         On first split, an existing finding is reused only for its known side;
         an UNKNOWN aggregate is detached rather than copied into either side.
     images, rois : iterable of mappings or DataFrame-like, optional
@@ -1012,11 +1013,6 @@ def _split_finding_groups(
             else:
                 # An earlier UNKNOWN aggregate cannot safely seed either side.
                 graph.remove(existing)
-            if references:
-                issues.append(Issue(
-                    "ambiguous_finding_reference", "Existing finding reference now has multiple targets",
-                    context={"grain": "finding", "key": key},
-                ))
         for side, side_rows in sorted(buckets.items(), key=lambda item: item[0].value):
             sibling = siblings.get(side)
             split_key = sibling.key if sibling is not None else allocate(accession, number, side)

@@ -245,3 +245,14 @@ through their reported exam even when their referenced finding is absent.
 The unresolved projection exposes typed registry facts for unkeyed entries and
 checks date validity only for fields applicable to the record type; unrelated
 columns in the shared schema remain null without missing-date issues.
+
+
+When a finding number is split, clinical entities retain their unambiguous exam
+link while the original finding reference remains unresolved. Each
+`ambiguous_finding_reference` diagnostic identifies the clinical `grain` and
+`identity`, plus the original `finding_key` and candidate finding keys/sides.
+In the `issues` projection, `kind` and `entity_key` join to that clinical entity.
+Incomplete records stay exam-scoped snapshots; their projected diagnostic joins
+`unresolved.record_key` rather than inventing an entity identity. A missing
+procedure identity still requires complete mapped procedure columns or a
+patient-scoped pathology record ID; finding ambiguity does not supply one.

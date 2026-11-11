@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Clinical exam context for split findings (#36)
+
+- Keep exam links for procedures and pathology with ambiguous finding numbers,
+  including existing links and pathology reached through a procedure.
+- Address ambiguity diagnostics to each clinical entity and include candidate
+  finding keys and sides. Incomplete records retain exam context and diagnostics
+  join their `unresolved.record_key`; corrected loads clear those snapshots.
+- Keep original finding references unresolved; no side-based attribution is inferred.
+
+
 ### Repeated finding numbers on different sides (#32)
 
 - Separate rows with the same accession/number and different populated valid
