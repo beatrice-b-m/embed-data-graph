@@ -56,7 +56,8 @@ class Selection(Generic[_SelectedT]):
                                      for _, address in sorted(matched, key=lambda entry: entry[0])}
         keys = {(kind, _encode(key)) for kind, key in addresses}
         result.load_issues = tuple(issue for issue in self.graph.load_issues
-                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys)
+                                  if (_issue_row(issue)["kind"], _issue_row(issue)["entity_key"]) in keys
+                                  or issue.context.get("unresolved_address") in result.unresolved_records)
         return result
 
     def records(self, name: str) -> List[Dict[str, Scalar]]:

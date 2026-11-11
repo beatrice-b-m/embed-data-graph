@@ -255,6 +255,8 @@ def test_corrected_ambiguous_record_clears_its_incomplete_snapshot():
     graph = load_embed(magview=[row("L"), row("R", path_severity=0)]).graph
     part = graph.partition(level="exam", key=lambda exam: exam.accession_number)["A"]
     assert any(issue["code"] == "ambiguous_finding_reference" for issue in part.records("issues"))
+    selection = graph.select(level="exam", predicate=lambda exam: True)
+    assert any(issue["code"] == "ambiguous_finding_reference" for issue in selection.records("issues"))
     load_embed(magview=[row("R", path_severity=0, bside="R", type="B", procdate_anon="2020-01-20")], into=graph)
     assert not [item for item in graph.records("unresolved") if item["kind"] == "pathology"]
     assert len(graph.records("pathology_exams")) == 1
