@@ -256,3 +256,26 @@ Incomplete records stay exam-scoped snapshots; their projected diagnostic joins
 `unresolved.record_key` rather than inventing an entity identity. A missing
 procedure identity still requires complete mapped procedure columns or a
 patient-scoped pathology record ID; finding ambiguity does not supply one.
+
+
+## Registry tumor identity
+
+Registry rows with `TUMOR_RECORD_NUMBER` are keyed by patient, registry ID and
+that tumor record ID. Rows without a tumor ID retain the patient/registry pair
+and ordinary same-key conflict rules. Missing IDs are never matched to a known
+tumor. A group pointer `(patient_id, registry_id)` reaches every registered entry
+in the group, so MagView does not discard or pick among multiple tumors. Exact
+triples select one tumor. Pointer resolution is independent of load order and
+updates when tumors arrive, move, or are removed. Unmatched pointers stay visible.
+
+`registry_entry(patient_id, registry_id, record_id=None)` always performs an exact
+lookup. Use the exam's or patient's registry collection to traverse all tumors.
+Rekeying a tumor updates exact references while a group pointer continues to name
+its group. Adding a tumor ID to a legacy entry preserves its group pointer;
+rekeying a sole legacy entry to a different group retains the prior reference
+propagation behavior. Detaching one tumor from a group replaces that pointer with
+exact references to the remaining current tumors. If the group contains a
+legacy entry without a tumor ID, identify that entry before detaching an
+individual tumor; otherwise the operation raises ValueError without mutation.
+Copies preserve the reference
+form and independently copy tumor facts and consumer state.

@@ -17,6 +17,7 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
+    Union,
     overload,
 )
 
@@ -96,6 +97,7 @@ class DatasetGraph:
         self.unresolved_records: Dict[Any, Any] = {}
         self.load_issues: Tuple[Issue, ...] = ()
         self._claimants: Dict[str, Dict[int, Exam]] = defaultdict(dict)
+        self._registry_groups: Dict[Tuple[str, str], Dict[int, MutableEntity]] = defaultdict(dict)
 
     # -- registries ----------------------------------------------------------
 
@@ -196,9 +198,29 @@ class DatasetGraph:
         """Return the ROI ``(image_id, str(roi_key))``, or None."""
         return self.get("roi", (image_id, str(roi_key)))
 
-    def registry_entry(self, patient_id: str, registry_id: Any) -> Optional[CancerRegistryEntry]:
-        """Return the registry entry ``(patient_id, str(registry_id))``, or None."""
-        return self.get("registry", (patient_id, str(registry_id)))
+    def registry_entry(
+        self, patient_id: str, registry_id: Any, record_id: Optional[str] = None,
+    ) -> Optional[CancerRegistryEntry]:
+        """Look up one registry entry, without selecting a tumor implicitly.
+
+        Parameters
+        ----------
+        patient_id : str
+            Patient identifier.
+        registry_id : object
+            Registry group identifier, converted to text.
+        record_id : str or None, optional
+            Tumor identifier. Default None looks up only the legacy two-part key.
+
+        Returns
+        -------
+        CancerRegistryEntry or None
+            Live entry at the exact key, or None. Use ``exam.registry_entries``
+            or ``patient.registry_entries`` to traverse multiple tumors.
+        """
+        key = ((patient_id, str(registry_id)) if record_id is None
+               else (patient_id, str(registry_id), str(record_id)))
+        return self.get("registry", key)
 
     def source_image(self, sop_uid: str) -> Optional[MammogramImage]:
         """Return the original (non-derived) image with this source SOP UID, or None."""
@@ -238,21 +260,31 @@ class DatasetGraph:
                 return ref
         raise KeyError(field)
 
+    def _resolve_reference(self, kind: str, target: Hashable) -> Tuple[MutableEntity, ...]:
+        """Resolve a stored target, expanding a registry group pair by index."""
+
+        if kind == "registry" and isinstance(target, tuple) and len(target) == 2:
+            return tuple(self._registry_groups.get(target, {}).values())
+        entity = self._entities[kind].get(target)
+        return () if entity is None else (entity,)
+
     def _referenced(self, entity: MutableEntity, role: str) -> List[MutableEntity]:
-        found = []
+        found: List[MutableEntity] = []
         for ref in entity._references:
             if ref.role == role:
                 for target in self._targets(entity, ref):
-                    obj = self._entities[ref.kind].get(target)
-                    if obj is not None:
-                        found.append(obj)
+                    found.extend(self._resolve_reference(ref.kind, target))
         return found
 
     def _referring(self, entity: MutableEntity, role: str, field: Optional[str] = None) -> List[MutableEntity]:
         found = []
-        for (_, name), referrer in self._referrers.get((entity.kind, entity.key), {}).items():
-            if (field is None or name == field) and self._reference(referrer, name).role == role:
-                found.append(referrer)
+        targets = [entity.key]
+        if entity.kind == "registry" and isinstance(entity.key, tuple) and len(entity.key) == 3:
+            targets.append(entity.key[:2])
+        for target in targets:
+            for (_, name), referrer in self._referrers.get((entity.kind, target), {}).items():
+                if (field is None or name == field) and self._reference(referrer, name).role == role:
+                    found.append(referrer)
         return found
 
     def children(self, entity: MutableEntity, kind: Optional[str] = None) -> Tuple[Any, ...]:
@@ -311,7 +343,7 @@ class DatasetGraph:
             for entity in self._entities[kind].values():
                 for ref in entity._references:
                     for target in self._targets(entity, ref):
-                        if target not in self._entities[ref.kind]:
+                        if not self._resolve_reference(ref.kind, target):
                             result.append(
                                 UnresolvedReference(kind, str(entity.key), ref.kind, str(target), "missing endpoint")
                             )
@@ -323,6 +355,8 @@ class DatasetGraph:
         from embed_data_graph.clinical.exams import Exam
 
         self._entities[entity.kind][entity.key] = entity
+        if entity.kind == "registry" and isinstance(entity.key, tuple):
+            self._registry_groups[entity.key[:2]][id(entity)] = entity
         object.__setattr__(entity, "_graph", self)
         for ref in entity._references:
             for target in self._targets(entity, ref):
@@ -339,6 +373,8 @@ class DatasetGraph:
     def _unindex(self, entity: MutableEntity) -> None:
         from embed_data_graph.clinical.exams import Exam
 
+        if entity.kind == "registry" and isinstance(entity.key, tuple):
+            self._registry_groups[entity.key[:2]].pop(id(entity), None)
         registry = self._entities[entity.kind]
         if registry.get(entity.key) is entity:
             del registry[entity.key]
@@ -590,12 +626,18 @@ class DatasetGraph:
     def detach(self, parent: MutableEntity, child: _EntityT) -> _EntityT:
         """Remove the containment of ``child`` by ``parent``; both stay registered.
 
+        Detaching a registry tumor reached through a group pointer replaces
+        that pointer with exact references to the other currently registered
+        group members. Future tumors no longer join that exam automatically.
+
         Raises
         ------
         ValueError
             An endpoint belongs elsewhere, or the reference is part of the
             child's key (a finding's accession, an ROI's image); pop the child
-            or rekey it instead.
+            or rekey it instead. Also raised when detaching an individual tumor
+            from a group that includes a legacy entry without a tumor ID:
+            identify that legacy entry first to preserve an exact reference.
         TypeError
             The pair is not a supported containment.
         """
@@ -605,7 +647,15 @@ class DatasetGraph:
         holder, ref = self._link(parent, child)
         target = child.key if holder is parent else parent.key
         if ref.many:
-            self.update(holder, **{ref.field: set(getattr(holder, ref.field)) - {target}})
+            targets = set(getattr(holder, ref.field))
+            if ref.kind == "registry" and isinstance(target, tuple) and target[:2] in targets:
+                group = target[:2]
+                members = self._resolve_reference("registry", group)
+                if target != group and any(item.key == group for item in members):
+                    raise ValueError("Assign a tumor ID to the legacy entry before detaching one group member")
+                targets.remove(group)
+                targets.update(item.key for item in members)
+            self.update(holder, **{ref.field: targets - {target}})
         elif ref.field in holder.__key_fields__:
             raise ValueError(f"{holder.kind}.{ref.field} is part of its key; pop or rekey it instead")
         elif getattr(holder, ref.field) == target:
@@ -657,10 +707,36 @@ class DatasetGraph:
         values = set(accessions) | (set(exam.linked_accessions) if merge else set())
         self.update(exam, linked_accessions=values)
 
-    def set_registry_assignments(self, exam: Exam, keys: Iterable[Tuple[str, str]], *, merge: bool = False) -> None:
-        """Replace (or with ``merge=True``, extend) an exam's registry assignments.
+    def set_registry_assignments(
+        self, exam: Exam, keys: Iterable[Union[Tuple[str, str], Tuple[str, str, str]]],
+        *, merge: bool = False,
+    ) -> None:
+        """Replace or extend an exam's registry assignments.
 
-        Keys are ``(patient_id, registry_id)``; entries are never deleted and
+        Parameters
+        ----------
+        exam : Exam
+            Registered exam whose references are changed in place.
+        keys : iterable of two- or three-part string tuples
+            Patient/registry group pairs or exact patient/registry/tumor triples.
+        merge : bool, optional
+            Default False replaces the set; True unions it with stored references.
+
+        Returns
+        -------
+        None
+            The exam is updated in place; the input iterable is consumed once.
+
+        Raises
+        ------
+        ValueError
+            The exam is not registered here or a reference has invalid identifiers.
+
+        Notes
+        -----
+        Pairs ``(patient_id, registry_id)`` reach all tumors in the group, including
+        ones registered later. Triples append record_id and name one tumor.
+        Entries are never deleted and
         missing entries resolve when registered.
         """
 
@@ -741,6 +817,12 @@ class DatasetGraph:
             if old == new:
                 continue
             for (referrer_id, field), referrer in list(self._referrers.get((current.kind, old), {}).items()):
+                if (current.kind == "registry" and isinstance(old, tuple) and len(old) == 2
+                        and (len(self._registry_groups.get(old, {})) > 1
+                             or isinstance(new, tuple) and new[:2] == old)):
+                    # A group pointer must not be narrowed to a newly identified
+                    # tumor, or moved away from other tumors still in that group.
+                    continue
                 referrer_changes = plan.setdefault(referrer_id, (referrer, {}))[1]
                 ref = self._reference(referrer, field)
                 base = referrer_changes.get(field, getattr(referrer, field))

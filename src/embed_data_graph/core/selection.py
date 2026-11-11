@@ -49,6 +49,8 @@ class Selection(Generic[_SelectedT]):
                 members.setdefault(id(ancestor), ancestor)
         result = DatasetGraph(source_scope=self.graph.source_scope)
         result._entities = {kind: {obj.key: obj for obj in members.values() if obj.kind == kind} for kind in KINDS}
+        for entry in result.registry_entries:
+            result._registry_groups[(entry.patient_id, entry.registry_id)][id(entry)] = entry
         addresses = {(obj.kind, obj.key) for obj in members.values()}
         record_index = self.graph._record_index()
         matched = {entry for address in addresses for entry in record_index.get(address, ())}

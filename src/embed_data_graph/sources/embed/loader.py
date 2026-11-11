@@ -177,13 +177,17 @@ def load_embed(
         Default None. Wide and narrow projections are reconciled together.
     registry : iterable of mappings or DataFrame-like, optional
         Patient-scoped registry entries keyed by patient and registry ID,
-        which default to ``empi_anon`` and ``cancer_outcome_registry_id``, the
-        columns of the MagView pointer. Default None. A row with a patient but
+        plus tumor record ID when present. Defaults bind ``empi_anon``,
+        ``cancer_outcome_registry_id`` and ``TUMOR_RECORD_NUMBER``. Missing tumor
+        IDs retain two-part keys and ordinary conflict handling. MagView's
+        two-part pointer reaches every tumor in that patient/registry group,
+        regardless of load order. Default None. A row with a patient but
         no registry ID is kept as an ``UnkeyedRegistryEntry`` of that patient
         with an INFO ``unkeyed_registry_entries`` issue; refresh replaces each
         addressed patient's unkeyed records and merge preserves them with a
-        ``registry_merge_requires_registry_id`` warning. Payload columns are
-        unbound by default and must be configured explicitly.
+        ``registry_merge_requires_registry_id`` warning. Registry fact columns
+        have default bindings; use ``columns`` to override them or bind
+        ``record_id`` to a documented alternative.
     into : DatasetGraph or None, optional
         Existing graph to mutate in place; None creates a graph. Existing entity
         objects and consumer metadata survive refresh at matching semantic keys.

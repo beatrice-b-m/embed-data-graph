@@ -372,7 +372,7 @@ def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns
     snapshot because unkeyed records cannot be matched to it.
     """
 
-    grouped: Dict[Tuple[str, str], List[Mapping[str, Any]]] = defaultdict(list)
+    grouped: Dict[Union[Tuple[str, str], Tuple[str, str, str]], List[Mapping[str, Any]]] = defaultdict(list)
     unkeyed: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
         patient_id = _id_at(row, columns.get("patient_id"))
@@ -385,15 +385,18 @@ def _apply_registry(state: _Snapshot, rows: Iterable[Mapping[str, Any]], columns
         if registry_id is None:
             unkeyed[patient_id].append(row)
         else:
-            grouped[(patient_id, registry_id)].append(row)
+            record_id = _id_at(row, columns.get("record_id"))
+            key = (patient_id, registry_id) if record_id is None else (patient_id, registry_id, record_id)
+            grouped[key].append(row)
             unkeyed.setdefault(patient_id, [])
     payload_columns = {name: column for name, column in columns.items() if name not in {"patient_id", "registry_id"}}
     _apply_unkeyed_registry(state, unkeyed, payload_columns)
+    payload_columns = {name: column for name, column in payload_columns.items() if name != "record_id"}
     for key, group in grouped.items():
         payload, conflicts = _combine([(row, payload_columns) for row in group], state.issues, key, "registry")
-        entity = state.graph.registry_entry(*key)
+        entity = state.graph.get("registry", key)
         if entity is None:
-            state.graph.register(CancerRegistryEntry(key[0], key[1], payload=payload))
+            state.graph.register(CancerRegistryEntry(key[0], key[1], payload=payload, record_id=key[2] if len(key) == 3 else None))
             continue
         updates = _for_mode(payload, conflicts, state.merge)
         current = dict(entity.payload)
