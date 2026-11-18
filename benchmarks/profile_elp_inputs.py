@@ -76,12 +76,23 @@ def measure(paths: Path, defs: elp.Definitions, profile_stage: str | None) -> di
     assert set(view_seconds) == set(rows)
     if profiler is not None and profiler.getstats():
         pstats.Stats(profiler, stream=sys.stderr).strip_dirs().sort_stats("cumulative").print_stats(35)
+    # These are estimates of retained table storage, taken after both the time
+    # and process peak measurements. The deep size can count shared objects.
+    unresolved_values = inputs.tables.get("unresolved_values")
+    unresolved_mib = None
+    if unresolved_values is not None:
+        unresolved_mib = {
+            "frame": round(float(unresolved_values.memory_usage(deep=True).sum()) / 2**20, 2),
+            "record_key": round(unresolved_values["record_key"].memory_usage(index=False, deep=True) / 2**20, 2),
+        }
     return {
         "python": platform.python_version(), "pandas": pd.__version__, "profiled_stage": profile_stage,
         "shape": shapes, "rows": rows, "graph_issues": len(inputs.report.issues),
         "read_s": seconds["read"], "file_s": dict(zip(roles, file_seconds)), "graph_s": seconds["graph"],
         "views_s": seconds["views"], "view_s": view_seconds, "summary_s": seconds["summary"],
         "total_s": total, "other_s": total - sum(seconds.values()), "peak_rss_mib_after": peak_mib,
+        "unresolved_counts": inputs.unresolved_counts().to_dict(orient="records"),
+        "unresolved_values_mib": unresolved_mib,
     }
 
 
