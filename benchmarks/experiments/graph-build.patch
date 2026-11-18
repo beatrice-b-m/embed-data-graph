@@ -4,12 +4,12 @@
      range_index: bool = False,
      index_unique: Optional[bool] = None,
  ) -> Iterator[TableRecord]:
+     rows = list(rows)
 +    if key is None:
 +        for ordinal, row in enumerate(rows):
 +            yield TableRecord(None, row, ordinal)
 +        return
 +
-     rows = list(rows)
      candidates: list[Optional[CanonicalKey]] = []
      issues: list[list[TableIssue]] = [[] for _ in rows]
 @@ -288,11 +293,6 @@
