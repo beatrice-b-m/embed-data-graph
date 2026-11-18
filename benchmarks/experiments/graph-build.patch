@@ -1,0 +1,177 @@
+--- a/src/embed_data_graph/core/tables.py
++++ b/src/embed_data_graph/core/tables.py
+@@ -254,6 +254,11 @@
+     range_index: bool = False,
+     index_unique: Optional[bool] = None,
+ ) -> Iterator[TableRecord]:
++    if key is None:
++        for ordinal, row in enumerate(rows):
++            yield TableRecord(None, row, ordinal)
++        return
++
+     rows = list(rows)
+     candidates: list[Optional[CanonicalKey]] = []
+     issues: list[list[TableIssue]] = [[] for _ in rows]
+@@ -288,11 +293,6 @@
+                     )
+                 )
+                 continue
+-        else:
+-            # No physical source key was requested.  The DataFrame index and
+-            # row ordinal remain deliberately unavailable to this record.
+-            candidates.append(None)
+-            continue
+
+         try:
+             candidates.append(canonicalize_source_key(raw_key))
+--- a/src/embed_data_graph/sources/embed/loader.py
++++ b/src/embed_data_graph/sources/embed/loader.py
+@@ -393,10 +393,10 @@
+     from embed_data_graph.sources.embed.imaging import load_imaging
+
+     load_clinical(
+-        procedures=[dict(item.mapping) for item in materialized["procedures"]],
+-        pathology=[dict(item.mapping) for item in materialized["pathology"]],
+-        magview=[dict(item.mapping) for item in materialized["magview"]],
+-        registry=[dict(item.mapping) for item in materialized["registry"]],
++        procedures=[item.mapping for item in materialized["procedures"]],
++        pathology=[item.mapping for item in materialized["pathology"]],
++        magview=[item.mapping for item in materialized["magview"]],
++        registry=[item.mapping for item in materialized["registry"]],
+         graph=graph,
+         columns=column_maps,
+         mode=mode,
+@@ -404,8 +404,8 @@
+         claims=claims,
+     )
+     load_imaging(
+-        images=[dict(item.mapping) for item in materialized["images"]],
+-        rois=None if rois is None else [dict(item.mapping) for item in materialized["rois"]],
++        images=[item.mapping for item in materialized["images"]],
++        rois=None if rois is None else [item.mapping for item in materialized["rois"]],
+         graph=graph,
+         columns=column_maps,
+         mode=mode,
+@@ -609,7 +609,7 @@
+             result.append(
+                 _InputRow(
+                     table=table_name,
+-                    mapping=dict(record.mapping),
++                    mapping=record.mapping,
+                     source=source,
+                     ordinal=record.ordinal,
+                 )
+@@ -781,15 +781,16 @@
+             context_date = next(iter(known)) if len(known) == 1 else None
+             contexts.setdefault((accession, context_date), []).append(row)
+         touched: set[str] = set()
+-        for (accession, context_date), context_rows in sorted(contexts.items(), key=repr):
++        for accession, context_date in sorted(contexts, key=repr):
++            context_rows = contexts[accession, context_date]
+             fields, conflicts = _combine_fields(context_rows, columns, converters, "patient", key, issues)
+             updates = _updates_for_mode(fields, conflicts, mode)
+-            current = {
+-                item.attribute: item.value
+-                for item in patient.attribute_observations
+-                if item.accession_number == accession and item.context_date == context_date
+-            }
+             if mode == "merge":
++                current = {
++                    item.attribute: item.value
++                    for item in patient.attribute_observations
++                    if item.accession_number == accession and item.context_date == context_date
++                }
+                 reconcile_merge({name: current.get(name) for name in updates}, updates, grain="patient", key=key, issues=issues)
+             for attribute, value in updates.items():
+                 patient.add_attribute_observation(
+@@ -1412,25 +1413,28 @@
+     conflicts: dict[str, bool] = {}
+     for semantic, converter in converters.items():
+         physical = columns.get(semantic)
+-        if physical is None or not _column_supplied(rows, physical):
+-            # An unbound column, or one absent from every row, is not part of
+-            # this snapshot: refresh leaves the current value alone.
++        if physical is None:
+             continue
++        supplied = False
+         candidates: list[Any] = []
+         for row in rows:
+-            if physical not in row.mapping:
++            value = row.mapping.get(physical, _MISSING)
++            if value is _MISSING:
+                 continue
+-            raw = scalar(row.mapping.get(physical))
++            supplied = True
++            raw = scalar(value)
+             if is_missing(raw):
+                 continue
+             try:
+                 candidate = converter(raw)
+             except (TypeError, ValueError, OverflowError, InvalidOperation):
+                 candidate = None
+-            if candidate is not None and not any(_same(candidate, item) for item in candidates):
++            if candidate is not None and (not candidates or not any(_same(candidate, item) for item in candidates)):
+                 candidates.append(candidate)
+-        candidates.sort(key=repr)
++        if not supplied:
++            continue
+         if len(candidates) > 1:
++            candidates.sort(key=repr)
+             conflicts[semantic] = True
+             values[semantic] = None
+             issues.append(
+--- a/src/embed_data_graph/sources/embed/_values.py
++++ b/src/embed_data_graph/sources/embed/_values.py
+@@ -18,6 +18,8 @@
+ def scalar(value: Any) -> Any:
+     """Unbox a NumPy-like scalar through ``item()``; return other values unchanged."""
+
++    if value is None or type(value) is str:
++        return value
+     item = getattr(value, "item", None)
+     if callable(item) and not isinstance(value, (str, bytes)):
+         try:
+@@ -30,6 +32,8 @@
+ def is_missing(value: Any) -> bool:
+     """Return whether a source value carries no fact."""
+
++    if value is None:
++        return True
+     if isinstance(value, str):
+         return not value.strip()
+     return is_null_scalar(value)
+@@ -40,13 +44,22 @@
+
+     if column is None:
+         return None
+-    value = scalar(row.get(column))
++    value = row.get(column)
++    if value is None:
++        return None
++    if type(value) is str:
++        return value if value.strip() else None
++    value = scalar(value)
+     return None if is_missing(value) else value
+
+
+ def text(value: Any) -> Optional[str]:
+     """Return stripped text, or None when missing."""
+
++    if value is None:
++        return None
++    if type(value) is str:
++        return value.strip() or None
+     value = scalar(value)
+     return None if is_missing(value) else str(value).strip()
+
+@@ -68,6 +81,10 @@
+     Missing values, booleans and non-finite numbers return None.
+     """
+
++    if value is None:
++        return None
++    if type(value) is str:
++        return value.strip() or None
+     value = scalar(value)
+     if is_missing(value) or isinstance(value, bool):
+         return None
