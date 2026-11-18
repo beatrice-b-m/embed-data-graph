@@ -255,6 +255,11 @@ def _records_from_rows(
     index_unique: Optional[bool] = None,
 ) -> Iterator[TableRecord]:
     rows = list(rows)
+    if key is None:
+        for ordinal, row in enumerate(rows):
+            yield TableRecord(None, row, ordinal)
+        return
+
     candidates: list[Optional[CanonicalKey]] = []
     issues: list[list[TableIssue]] = [[] for _ in rows]
 
@@ -288,11 +293,6 @@ def _records_from_rows(
                     )
                 )
                 continue
-        else:
-            # No physical source key was requested.  The DataFrame index and
-            # row ordinal remain deliberately unavailable to this record.
-            candidates.append(None)
-            continue
 
         try:
             candidates.append(canonicalize_source_key(raw_key))

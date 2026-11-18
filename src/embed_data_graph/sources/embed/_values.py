@@ -18,6 +18,8 @@ from embed_data_graph.core.source import Issue, IssueSeverity, is_null_scalar
 def scalar(value: Any) -> Any:
     """Unbox a NumPy-like scalar through ``item()``; return other values unchanged."""
 
+    if value is None or type(value) is str:
+        return value
     item = getattr(value, "item", None)
     if callable(item) and not isinstance(value, (str, bytes)):
         try:
@@ -30,6 +32,8 @@ def scalar(value: Any) -> Any:
 def is_missing(value: Any) -> bool:
     """Return whether a source value carries no fact."""
 
+    if value is None:
+        return True
     if isinstance(value, str):
         return not value.strip()
     return is_null_scalar(value)
@@ -40,13 +44,22 @@ def cell(row: Mapping[str, Any], column: Optional[str]) -> Any:
 
     if column is None:
         return None
-    value = scalar(row.get(column))
+    value = row.get(column)
+    if value is None:
+        return None
+    if type(value) is str:
+        return value if value.strip() else None
+    value = scalar(value)
     return None if is_missing(value) else value
 
 
 def text(value: Any) -> Optional[str]:
     """Return stripped text, or None when missing."""
 
+    if value is None:
+        return None
+    if type(value) is str:
+        return value.strip() or None
     value = scalar(value)
     return None if is_missing(value) else str(value).strip()
 
@@ -68,6 +81,10 @@ def identifier(value: Any) -> Optional[str]:
     Missing values, booleans and non-finite numbers return None.
     """
 
+    if value is None:
+        return None
+    if type(value) is str:
+        return value.strip() or None
     value = scalar(value)
     if is_missing(value) or isinstance(value, bool):
         return None
