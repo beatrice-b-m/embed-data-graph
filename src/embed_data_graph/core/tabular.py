@@ -55,6 +55,7 @@ _CODES = {
     "registry": ("estrogen_receptor", "progesterone_receptor", "her2"),
 }
 _FINDING_DESCRIPTORS = tuple(name for name in _CODES["findings"] if name not in {"assessment", "recommendation"})
+_PATHOLOGY_DESCRIPTORS = tuple(name for name in _CODES["pathology"] if name.startswith("descriptor_"))
 _FIELDS = {
     "patients": "patient_id sex race ethnicity birth_year cohort_number",
     "exams": "accession_number patient_id exam_date description patient_age location_id accession_type total_left_findings total_right_findings contested owner_explicit imaged_laterality",
@@ -124,6 +125,8 @@ def table_schema(name: str) -> TableSchema:
         for field in _FINDING_DESCRIPTORS:
             columns.update({field: "string", field + "_meaning": "string"})
         columns.update(record_id="string")
+        for field in _PATHOLOGY_DESCRIPTORS:
+            columns.update({field: "string", field + "_meaning": "string"})
         key = ("record_key",)
     elif name == "unresolved_values":
         columns = {"record_key": "string", "field": "string", "value": "scalar"}
@@ -268,8 +271,7 @@ def _entity_row(entity: Any, table: str, graph: DatasetGraph) -> Dict[str, Any]:
     for name in _CODES.get(table, ()):
         value = row.get(name, getattr(entity, name, None))
         if table == "pathology" and name.startswith("descriptor_"):
-            slot = int(name.split("_")[1])
-            value = next((d.descriptor for d in entity.descriptors if d.source_ordinal == slot), None)
+            value = _descriptor_slot(entity.descriptors, name)
         if table == "findings":
             value = (getattr(entity.interpretation, name, None) if name in {"assessment", "recommendation"}
                      else entity.descriptors.get(name))
@@ -281,6 +283,13 @@ def _entity_row(entity: Any, table: str, graph: DatasetGraph) -> Dict[str, Any]:
                 names = ("y_min", "x_min", "y_max", "x_max") if prefix else ("y_min", "x_min", "y_stop", "x_stop")
                 row.update(zip((prefix + n for n in names), values))
     return row
+
+
+def _descriptor_slot(descriptors: Any, name: str) -> Any:
+    """Return the pathology descriptor supplied in source slot ``descriptor_<i>``."""
+
+    slot = int(name.split("_")[1])
+    return next((d.descriptor for d in descriptors if d.source_ordinal == slot), None)
 
 
 def _issue_row(issue: Issue, kind: Optional[str] = None, key: Optional[str] = None) -> Dict[str, Scalar]:
@@ -435,6 +444,10 @@ def project(graph: DatasetGraph, requested: Optional[Tuple[str, ...]] = None) ->
             # Same typed descriptor columns and code normalization as findings.
             for field in _FINDING_DESCRIPTORS:
                 _code_fields(row, field, record.descriptors.get(field))
+        if isinstance(record, UnresolvedClinicalRecord) and record.kind == "pathology":
+            # Same descriptor slots and code normalization as pathology.
+            for field in _PATHOLOGY_DESCRIPTORS:
+                _code_fields(row, field, _descriptor_slot(record.descriptors, field))
         interpretation = getattr(record, "interpretation", None)
         for name in ("assessment", "recommendation"):
             _code_fields(row, name, getattr(interpretation, name, None))

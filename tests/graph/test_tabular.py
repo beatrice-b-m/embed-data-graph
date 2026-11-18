@@ -245,6 +245,32 @@ def test_unresolved_pathology_exposes_raw_severity(acc, numfind):
     assert 6 in graph.table("unresolved").raw_severity.tolist()
 
 
+@pytest.mark.parametrize("acc, numfind", [("A", None), (999, None)])
+def test_unresolved_pathology_projects_descriptor_slots_like_pathology(acc, numfind):
+    descriptors = {"path1": "IDC", "path3": "DCIS", "path10": "LYMPHOMA"}
+    base = {"empi_anon": "P", "type": "B", "procdate_anon": "2021-05-01", "path_severity": 0, **descriptors}
+    keyed = load_embed(pathology=[{**base, "acc_anon": "A", "numfind": 1, "side": "L", "bside": "L"}]).graph
+    unkeyed = load_embed(pathology=[{**base, "acc_anon": acc, "numfind": numfind}]).graph
+    expected, = keyed.records("pathology")
+    records = [r for r in unkeyed.records("unresolved") if r["kind"] == "pathology" and r["descriptor_1"] is not None]
+    assert len(records) == 1
+    record, = records
+    slots = [f"descriptor_{i}" for i in range(1, 11)]
+    fields = [*slots, *(name + "_meaning" for name in slots)]
+    unresolved_schema = unkeyed.table_schema("unresolved").columns
+    assert all(unresolved_schema[f] == keyed.table_schema("pathology").columns[f] for f in fields)
+    # Appended after existing columns, so earlier positions stay stable.
+    assert list(unresolved_schema)[-len(fields):] == [c for s in slots for c in (s, s + "_meaning")]
+    for field in fields:
+        assert record[field] == expected[field], field
+    assert (record["descriptor_1"], record["descriptor_3"], record["descriptor_10"]) == ("IDC", "DCIS", "LYMPHOMA")
+    assert record["descriptor_2"] is None
+    assert unkeyed.table("unresolved").descriptor_10.dropna().tolist() == ["LYMPHOMA"]
+    finding = load_embed(magview=[{"empi_anon": "P", "acc_anon": "A", "numfind": None, "side": "L", "asses": "A"}]).graph
+    assert finding.records("unresolved")
+    assert all(r[f] is None for r in finding.records("unresolved") for f in fields)
+
+
 def test_clinical_conflict_issues_join_the_record_whose_value_they_nulled():
     columns = {"pathology": {"record_id": "report_id"}}
     row = {"empi_anon": "P", "acc_anon": "A", "numfind": 1, "report_id": "R1", "path_severity": 4}

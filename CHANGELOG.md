@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Descriptor slots on unresolved pathology rows (#38)
+
+- Append `descriptor_1`..`descriptor_10` and their `_meaning` companions to the
+  `unresolved` schema. Unresolved pathology rows (incomplete procedure identity,
+  invalid accession) now carry the same slot values and code normalization as
+  `pathology` rows; the columns are null on other kinds.
+
 ### Separate tumors within registry groups (#35)
 
 - Bind optional registry `record_id` to `TUMOR_RECORD_NUMBER` and use a third key
