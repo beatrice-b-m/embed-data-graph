@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Faster graph loading and tabular projection
+
+- Reuse normalized rows across adapters and skip work for unrequested tables
+  when projecting graph data. In a synthetic ELP load with 96,000 MagView rows
+  and 1,600 registry rows, median loading time fell from 26.35 s to 16.01 s
+  and median peak RSS rose from 1,666 to 1,857 MiB.
+  [Loading profile and reproduction steps](benchmarks/label-pipeline-loading.md)
+
 ### Descriptor slots on unresolved pathology rows (#38)
 
 - Append `descriptor_1`..`descriptor_10` and their `_meaning` companions to the

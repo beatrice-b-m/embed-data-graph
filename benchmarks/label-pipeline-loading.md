@@ -1,6 +1,6 @@
 # Where the label pipeline spends its loading time
 
-**On 96,000 synthetic MagView rows and 1,600 registry rows, the actual ELP loader spent 12.60 s building the graph and 13.34 s converting it to 17 DataFrames.** File reads took 0.41 s. Two experimental changes inside the graph library brought the full load from **26.35 s to 16.01 s**, a **39% reduction**. Median peak memory increased from **1,666 to 1,857 MiB**. The existing ELP code produced identical output on both runs.
+**On 96,000 synthetic MagView rows and 1,600 registry rows, the ELP loader at its original graph pin spent 12.60 s building the graph and 13.34 s converting it to 17 DataFrames.** File reads took 0.41 s. The graph construction and projection optimizations now enabled in this library brought the full load from **26.35 s to 16.01 s**, a **39% reduction**. Median peak memory increased from **1,666 to 1,857 MiB**. The existing ELP code produced identical output on both runs.
 
 The clinical run record establishes the priority. Loading took **1,342.69 s** (22 min 23 s), or 85.4% of the reported loading and step time. Label steps took 230.44 s. `elp.run()` records one interval around `load_inputs`, which reads files, calls `load_embed` once, calls `graph.table(name)` for each view, then summarizes the results. Its 29,288.7 MiB peak (28.60 GiB) is the process high-water mark through the label steps. Attribution within that interval requires separate stage measurements. The timings below use synthetic inputs. [ELP run timing](https://github.com/beatrice-b-m/embed-label-pipeline/blob/eb4f8a1a00145bcc305d8529999987640b0816e4/src/embed_label_pipeline/run.py#L152-L181) · [ELP input loader](https://github.com/beatrice-b-m/embed-label-pipeline/blob/eb4f8a1a00145bcc305d8529999987640b0816e4/src/embed_label_pipeline/inputs.py#L100-L188)
 
@@ -23,7 +23,7 @@ On the 96,000-row baseline, median process peaks were 418 MiB after reading, 1,4
 
 At 96,000 rows, `issues` took **5.05 s**, `unresolved` **2.61 s**, and `unresolved_values` **2.64 s**. Together these consumed **77% of all projection time**. There were 9,600 unresolved records, 91,200 unresolved-value rows and 19,200 projected issue rows.
 
-Each of these three calls walks unresolved records. It flattens their fields, serializes the address and contents to make occurrence keys, constructs both unresolved output tables, and serializes records again to match diagnostic addresses. Unresolved clinical records carry their full source-row payload. The `issues` call also normalizes and temporarily retains rows for every entity grain to discover date diagnostics. Earlier grain requests have already performed much of that normalization. [Projection implementation at the pin](https://github.com/beatrice-b-m/embed-data-graph/blob/125b5c437851c5ddabb4f8879986abd862c83dd5/src/embed_data_graph/core/tabular.py#L324-L463)
+At the downstream pin, each of these three calls walks unresolved records. It flattens their fields, serializes the address and contents to make occurrence keys, constructs both unresolved output tables, and serializes records again to match diagnostic addresses. Unresolved clinical records carry their full source-row payload. The `issues` call also normalizes and temporarily retains rows for every entity grain to discover date diagnostics. Earlier grain requests have already performed much of that normalization. [Projection implementation at the pin](https://github.com/beatrice-b-m/embed-data-graph/blob/125b5c437851c5ddabb4f8879986abd862c83dd5/src/embed_data_graph/core/tabular.py#L324-L463)
 
 In a separate 6,000-row function profile, 17 calls to `project` used 2.94 s of the 2.99 s profiled projection. Canonical key encoding consumed 1.49 s cumulatively. There were 900 calls to `UnresolvedClinicalRecord.to_dict` for 300 unresolved pathology records. The final pandas conversion used 0.052 s. These cumulative measurements overlap and profiler instrumentation increases wall time.
 
@@ -31,7 +31,7 @@ The projection patch builds only the requested rows, inspects date fields for di
 
 ### Building the graph from wide DataFrames
 
-Graph construction spreads its time across several passes over the same rows. The loader converts DataFrames to record dictionaries, makes read-only row snapshots, copies mappings again, projects MagView into patient, exam and finding groups, reconciles their fields, and applies procedures, pathology, registry links and patient claims. Patient-context sorting even formats the full source rows through `repr` while ordering contexts. [Table normalization](https://github.com/beatrice-b-m/embed-data-graph/blob/125b5c437851c5ddabb4f8879986abd862c83dd5/src/embed_data_graph/core/tables.py#L145-L319) · [Loader orchestration](https://github.com/beatrice-b-m/embed-data-graph/blob/125b5c437851c5ddabb4f8879986abd862c83dd5/src/embed_data_graph/sources/embed/loader.py#L319-L421)
+At the downstream pin, graph construction makes several passes over the same rows. The loader converts DataFrames to record dictionaries, makes read-only row snapshots, copies mappings again, projects MagView into patient, exam and finding groups, reconciles their fields, and applies procedures, pathology, registry links and patient claims. Patient-context sorting even formats the full source rows through `repr` while ordering contexts. [Table normalization](https://github.com/beatrice-b-m/embed-data-graph/blob/125b5c437851c5ddabb4f8879986abd862c83dd5/src/embed_data_graph/core/tables.py#L145-L319) · [Loader orchestration](https://github.com/beatrice-b-m/embed-data-graph/blob/125b5c437851c5ddabb4f8879986abd862c83dd5/src/embed_data_graph/sources/embed/loader.py#L319-L421)
 
 | Operation in the 6,000-row graph profile | Cumulative seconds |
 |---|---:|
@@ -81,7 +81,7 @@ These are three-process medians from the graph benchmark using ELP's read settin
    results = elp.run_steps(inputs, revised)
    ```
 
-2. **For fresh loads, qualify the projection and graph patches against the clinical snapshot.** Projection provides the larger single gain on this fixture, especially with incomplete records. The two changes are independent and work through ELP's existing calls. Measure each separately on the real shape and compare all configured frames, dtypes, row order and diagnostics before changing the downstream graph pin.
+2. **For fresh loads, qualify the optimized library against the clinical snapshot.** Projection provides the larger single gain on this fixture, especially with incomplete records. The two changes are independent and work through ELP's existing calls. Measure stage times and peak RSS on the real inputs, and compare all configured frames, dtypes, row order and diagnostics before updating the downstream graph pin.
 3. **Consider a supported selected-table call for ELP.** As a separate experiment on the original graph revision, projecting the same 17 names together reduced view time from 0.840 to 0.374 s (6,000 rows, fresh-process medians), and from 13.22 to 6.03 s (96,000 rows, one run each). All 17 frames matched. The benchmark uses a private helper to test this design. The existing public `graph.tables()` also constructs the large supplementary `values` table. A selected-table API could avoid that cost. Its gains overlap the projection patch. With both patches already applied, batching took 0.281 s for the 6,000-row views.
 
 For repeated runs in **new processes**, a downstream cache of the prepared inputs is a further option. Key it by input file contents, resolved input configuration, and graph and projection revisions. Verify a round trip against the complete `Inputs` contract, including dtypes, report diagnostics and any graph access needed by the consumer. This option has no measured speedup here.
@@ -106,7 +106,7 @@ python -m benchmarks.label_pipeline_loading --patients 1000 --incomplete-every 0
 python -m benchmarks.label_pipeline_loading --patients 10 --visits 300 --incomplete-every 0
 ```
 
-To reproduce the headline comparison, run the commands below from the graph checkout in a Python environment with ELP and its pinned graph distribution installed. The fixture writer and profiler run in separate processes. The paths file has one entry per input role, the format accepted by `elp.run()`. Repeat the last command in fresh processes before and after applying the patches.
+To reproduce the headline comparison, run the commands below from the graph checkout in a Python environment with ELP and its pinned graph distribution installed. The fixture writer and profiler run in separate processes. The paths file has one entry per input role, the format accepted by `elp.run()`. The last command measures the optimized checkout.
 
 ```bash
 fixture_dir=$(mktemp -d)
@@ -119,15 +119,26 @@ folder = Path(sys.argv[1])
 write_fixture(folder, patients=16000, visits=3, incomplete_every=10, wide=True)
 (folder / "paths.yaml").write_text("magview: magview.csv\nregistry: registry.csv\n")
 PY
-PYTHONPATH=src python benchmarks/profile_elp_inputs.py "$fixture_dir/paths.yaml"
+PYTHONPATH=src python benchmarks/profile_elp_inputs.py "$fixture_dir/paths.yaml" > "$fixture_dir/optimized.json"
 ```
 
-To reproduce the experimental variants, use a disposable checkout of this profiling branch. Run the baseline, apply one or both patches there, and rerun the same command with that checkout's `src` on the Python path. The patches target the downstream graph pin. Each candidate matched all 17 ELP DataFrames and ordered load-report diagnostics on the downstream walkthrough and on a wide 25-patient subset containing unresolved records.
-
-We captured the baseline and patched ELP outputs in separate processes and compared one pair of frames at a time with `assert_frame_equal(check_exact=True)`. With both patches applied, the full 96,000-row comparison matched **all 396,800 projected rows**, including column order, row order, exact values and pandas dtypes. All 9,600 ordered load-report diagnostics matched. The combined patches passed the graph library's 585 tests, including wheel and source distribution checks, plus Ruff and mypy.
+For the baseline and individual optimizations, use the same fixture and Python environment with a separate worktree at `a064e5a`. This revision contains the benchmark scripts and both experiment patches alongside the original loader. The commands below restore the baseline after each individual run.
 
 ```bash
-git apply --check benchmarks/experiments/graph-build.patch benchmarks/experiments/requested-views.patch
-git apply benchmarks/experiments/graph-build.patch benchmarks/experiments/requested-views.patch
-PYTHONPATH=src python -m benchmarks.label_pipeline_loading --patients 1000 --compare-views
+baseline_dir="$fixture_dir/baseline"
+git worktree add --detach "$baseline_dir" a064e5a && (
+  set -e
+  cd "$baseline_dir"
+  PYTHONPATH=src python benchmarks/profile_elp_inputs.py "$fixture_dir/paths.yaml" > "$fixture_dir/baseline.json"
+  for variant in graph-build requested-views; do
+    patch="benchmarks/experiments/$variant.patch"
+    git apply "$patch"
+    PYTHONPATH=src python benchmarks/profile_elp_inputs.py "$fixture_dir/paths.yaml" > "$fixture_dir/$variant.json"
+    git apply --reverse "$patch"
+  done
+) && git worktree remove "$baseline_dir"
 ```
+
+Each individual optimization matched all 17 ELP DataFrames and ordered load-report diagnostics on the downstream walkthrough and on a wide 25-patient subset containing unresolved records.
+
+We captured the baseline and patched ELP outputs in separate processes and compared one pair of frames at a time with `assert_frame_equal(check_exact=True)`. With both patches applied, the full 96,000-row comparison matched **all 396,800 projected rows**, including column order, row order, exact values and pandas dtypes. All 9,600 ordered load-report diagnostics matched. Graph construction landed in `d774ed3` and projection in `49420b0`. The latter includes both changes. A fresh 96,000-row run on that revision took 16.02 s in `elp.load_inputs()` and matched the captured baseline. All 587 library tests passed, including regression tests for borrowed input rows and diagnostic joins after refresh. Ruff, mypy, the researcher example, and the wheel and source distribution builds passed.

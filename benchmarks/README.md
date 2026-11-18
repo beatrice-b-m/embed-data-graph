@@ -2,8 +2,8 @@
 
 For the clinical MagView and registry path used by `elp.run()`, see the
 [label pipeline loading profile](label-pipeline-loading.md). It measures graph
-construction and the 17 requested DataFrames separately, tests two candidate
-optimizations, and includes a profiler for the installed downstream environment.
+construction and the 17 requested DataFrames separately, compares the two
+optimizations enabled in this library, and includes a downstream profiler.
 
 Measured 2026-09-23 against `b180feb` on branch `refactor/catalog-alignment`.
 Python 3.13.11, macOS-26.5.1-arm64-arm-64bit-Mach-O.
