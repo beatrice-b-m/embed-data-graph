@@ -240,6 +240,18 @@ def test_incomplete_ambiguous_pathology_is_exam_scoped_with_record_diagnostic():
     assert len(mapped.pathology) == 1 and len(mapped.records("pathology_exams")) == 1
 
 
+def test_refreshed_ambiguity_diagnostics_join_only_current_pathology_occurrences():
+    graph = load_embed(magview=[row("L"), row("R", path_severity=0)]).graph
+    load_embed(magview=[row("R", path_severity=3), row("R", path_severity=3)], into=graph)
+
+    records = [item for item in graph.records("unresolved") if item["kind"] == "pathology"]
+    keys = {item["record_key"] for item in records}
+    assert len(keys) == len(records) == 2
+    issues = [item for item in graph.records("issues") if item["code"] == "ambiguous_finding_reference"]
+    assert len(issues) == 2
+    assert {issue["entity_key"] for issue in issues} == keys
+
+
 def test_splitting_existing_clinical_links_retains_exam_context():
     graph = load_embed(magview=[row("L", bside="L", type="B", procdate_anon="2020-01-01", path_severity=0)]).graph
     procedure, = graph.procedures
