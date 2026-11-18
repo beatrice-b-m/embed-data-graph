@@ -69,7 +69,10 @@ Unkeyed findings also carry the same typed descriptor columns as `findings`
 (`mass` through `implant_finding`, each with a `_meaning` companion), with the
 same code normalization. Unresolved pathology rows carry `raw_severity`, the
 severity as supplied, beside the normalized `severity`, so an out-of-scale code
-is distinguishable from a missing one. These columns are null on other kinds.
+is distinguishable from a missing one. They also carry the pathology descriptor
+slots `descriptor_1` through `descriptor_10`, each with a `_meaning` companion,
+with the same slot mapping and code normalization as `pathology`; these are
+appended after `record_id`. These columns are null on other kinds.
 Unkeyed registry entries expose every typed registry fact in `unresolved`,
 including parsed `diagnosis_date`, normalized histology/behavior and `icdo3`,
 source and normalized laterality, stages, receptors and vital status. Their
@@ -535,6 +538,27 @@ Key: `record_key`
 | `other_finding_meaning` | string |
 | `implant_finding` | string |
 | `implant_finding_meaning` | string |
+| `record_id` | string |
+| `descriptor_1` | string |
+| `descriptor_1_meaning` | string |
+| `descriptor_2` | string |
+| `descriptor_2_meaning` | string |
+| `descriptor_3` | string |
+| `descriptor_3_meaning` | string |
+| `descriptor_4` | string |
+| `descriptor_4_meaning` | string |
+| `descriptor_5` | string |
+| `descriptor_5_meaning` | string |
+| `descriptor_6` | string |
+| `descriptor_6_meaning` | string |
+| `descriptor_7` | string |
+| `descriptor_7_meaning` | string |
+| `descriptor_8` | string |
+| `descriptor_8_meaning` | string |
+| `descriptor_9` | string |
+| `descriptor_9_meaning` | string |
+| `descriptor_10` | string |
+| `descriptor_10_meaning` | string |
 
 ### unresolved_values
 
