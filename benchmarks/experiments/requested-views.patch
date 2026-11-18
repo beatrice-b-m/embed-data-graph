@@ -1,0 +1,96 @@
+--- a/src/embed_data_graph/core/tabular.py
++++ b/src/embed_data_graph/core/tabular.py
+@@ -333,25 +333,31 @@
+     schemas = {name: table_schema(name) for name in names}
+     diagnostics = [_issue_row(issue) for issue in graph.load_issues
+                    if "unresolved_record" not in issue.context] if "issues" in wanted else []
+-    unresolved_issues: Dict[str, List[Issue]] = {}
++    unresolved_issues: Dict[str, Dict[str, List[Issue]]] = {}
+     for issue in graph.load_issues if "issues" in wanted else ():
+         if "unresolved_record" in issue.context:
+-            marker = _encode((issue.context["unresolved_address"], issue.context["unresolved_record"]))
+-            unresolved_issues.setdefault(marker, []).append(issue)
++            address_key = _encode(issue.context["unresolved_address"])
++            record_marker = _encode(issue.context["unresolved_record"])
++            unresolved_issues.setdefault(address_key, {}).setdefault(record_marker, []).append(issue)
++    # When an entity table was not requested, only its date fields can
++    # contribute diagnostics. Other normalized cells would be discarded.
++    date_columns = {name: {k: v for k, v in schema.columns.items() if v == "datetime"}
++                    for name, schema in schemas.items()}
+
+     def normalize(
+         row: Dict[str, Any], table: str, kind: str, key: str,
+         applicable_dates: Optional[Tuple[str, ...]] = None,
+     ) -> Dict[str, Scalar]:
+         normalized: Dict[str, Scalar] = {}
+-        for name, dtype in schemas[table].columns.items():
++        columns = schemas[table].columns if table in wanted else date_columns[table]
++        for name, dtype in columns.items():
+             value = row.get(name)
+             if dtype == "datetime":
+                 if applicable_dates is not None and name not in applicable_dates:
+                     normalized[name] = None
+                     continue
+                 parsed = _date(value)
+-                if parsed is None:
++                if parsed is None and "issues" in wanted:
+                     issue = Issue("missing_date" if value is None or value == "" else "invalid_date",
+                                   "Date is missing or cannot be represented as a datetime",
+                                   context={"field": name, "value": _scalar(value)})
+@@ -363,11 +369,15 @@
+         return normalized
+
+     for table, kind in _GRAINS.items():
+-        if table not in wanted and "values" not in wanted and "issues" not in wanted:
++        project_rows = table in wanted or ("issues" in wanted and bool(date_columns[table]))
++        if not project_rows and "values" not in wanted:
+             continue
+         for entity in graph._values(kind):
+             key = _encode(entity.key)
+-            output[table].append(normalize(_entity_row(entity, table, graph), table, kind, key))
++            if project_rows:
++                grain_row = normalize(_entity_row(entity, table, graph), table, kind, key)
++                if table in wanted:
++                    output[table].append(grain_row)
+             if "values" not in wanted:
+                 continue
+             data = entity._to_dict_data()
+@@ -407,11 +417,20 @@
+         occurrence = occurrences.get(base, 0)
+         occurrences[base] = occurrence + 1
+         key = _encode((base, occurrence))
+-        marker = _encode((address, record.to_dict())) if hasattr(record, "to_dict") else ""
+-        for issue in unresolved_issues.get(marker, ()):
+-            diagnostics.append(_issue_row(issue, kind, key))
+-        row = {name: getattr(record, name, None) for name in table_schema("unresolved").columns}
+-        row.update(record_key=key, address=_encode(address), kind=kind, reason=reason, incomplete=True)
++        if "unresolved_values" in wanted:
++            for field, value in leaves.items():
++                output["unresolved_values"].append(dict(record_key=key, field=field, value=value))
++        if not (wanted & {"unresolved", "issues"}):
++            continue
++        address_key = _encode(address)
++        markers = unresolved_issues.get(address_key)
++        if markers and hasattr(record, "to_dict"):
++            for issue in markers.get(_encode(record.to_dict()), ()):
++                diagnostics.append(_issue_row(issue, kind, key))
++        if "unresolved" not in wanted and not isinstance(record, (UnresolvedClinicalRecord, UnkeyedRegistryEntry)):
++            continue
++        row = {name: getattr(record, name, None) for name in schemas["unresolved"].columns}
++        row.update(record_key=key, address=address_key, kind=kind, reason=reason, incomplete=True)
+         for part in address if isinstance(address, tuple) else ():
+             if not isinstance(part, tuple) or len(part) != 2:
+                 continue
+@@ -452,9 +471,9 @@
+         for name in ("assessment", "recommendation"):
+             _code_fields(row, name, getattr(interpretation, name, None))
+         _code_fields(row, "procedure_type", getattr(record, "procedure_type", None))
+-        output["unresolved"].append(normalize(row, "unresolved", kind, key, applicable_dates))
+-        for field, value in leaves.items():
+-            output["unresolved_values"].append(dict(record_key=key, field=field, value=value))
++        normalized = normalize(row, "unresolved", kind, key, applicable_dates)
++        if "unresolved" in wanted:
++            output["unresolved"].append(normalized)
+     output["issues"] = list({row["issue_key"]: row for row in diagnostics}.values())
+     output = {name: rows for name, rows in output.items() if name in wanted}
+     for name, rows in output.items():
