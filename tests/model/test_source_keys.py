@@ -42,3 +42,25 @@ def test_requested_duplicate_or_nullable_keys_are_not_claimed_stable() -> None:
 def test_unrequested_dataframe_indexes_are_not_diagnostic_identity():
     frame = pd.DataFrame({"empi_anon": ["P", "Q"]}, index=[4, 4])
     assert all(record.source_key is None for record in iter_records(frame))
+
+
+def test_unkeyed_dataframe_keeps_its_row_sequence_during_iteration():
+    rows = [{"empi_anon": "P"}, {"empi_anon": "Q"}]
+
+    class Frame:
+        columns = ["empi_anon"]
+        index = [10, 20]
+
+        def to_dict(self, orient):
+            assert orient == "records"
+            return rows
+
+    records = iter_records(Frame())
+    first = next(records)
+    rows[0]["empi_anon"] = "changed"
+    rows.clear()
+    (second,) = records
+
+    assert [(r.ordinal, r.mapping["empi_anon"], r.source_key) for r in (first, second)] == [
+        (0, "P", None), (1, "Q", None),
+    ]
